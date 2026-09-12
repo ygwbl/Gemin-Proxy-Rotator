@@ -75,7 +75,7 @@ import {
   serveCliLogin,
   handleCliLoginApi,
 } from "./onboarding.js";
-import { requireAdmin } from "./admin-auth.js";
+import { requireAdmin, isAdminAuthorized, getConfiguredAdminToken } from "./admin-auth.js";
 import { PayloadTooLargeError, readLimitedBody } from "./body-limit.js";
 import { validateConfig, validateProxyRequestBody } from "./validators.js";
 import { logger } from "./logger.js";
@@ -2156,6 +2156,17 @@ export function startProxy(
     }
 
     if (method === "GET" && (pathname === "/" || pathname === "/dashboard")) {
+      if (!isAdminAuthorized(req)) {
+        const adminToken = getConfiguredAdminToken();
+        if (adminToken) {
+          res.writeHead(302, {
+            Location: `/?token=${adminToken}`,
+            "Set-Cookie": `rotator_admin_token=${encodeURIComponent(adminToken)}; Path=/; SameSite=Lax; Max-Age=31536000`,
+          });
+          res.end();
+          return;
+        }
+      }
       if (!requireAdmin(req, res)) return;
       trackFeature("dashboard");
       serveDashboard(res, req);
