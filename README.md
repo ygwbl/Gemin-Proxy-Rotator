@@ -8,6 +8,14 @@
 
 ---
 
+## 📸 界面预览
+
+![总览面板](docs/screenshot1.png)
+
+![账号详情 + 延时雷达](docs/screenshot2.png)
+
+---
+
 ## ✨ 核心功能
 
 | 功能 | 说明 |
@@ -51,8 +59,6 @@ tuxevil-rotator start
 
 ## 🔧 手动安装（可选）
 
-如果 `install.bat` 无法运行，可手动执行：
-
 ```powershell
 # 1. 安装基础依赖
 npm install -g tuxevil-rotator
@@ -93,7 +99,8 @@ Claude 请求  →  选 Claude percentRemaining 最高的账号
 ├── patches/
 │   └── proxy.ts                # 双模型分流核心逻辑
 ├── docs/
-│   └── dashboard-preview.jpg   # 仪表盘预览图
+│   ├── screenshot1.png         # 总览面板截图
+│   └── screenshot2.png         # 账号详情截图
 ├── install.bat                  # Windows 一键安装脚本
 └── README.md
 ```
@@ -103,4 +110,3 @@ Claude 请求  →  选 Claude percentRemaining 最高的账号
 ## License
 
 MIT © [ygwbl](https://github.com/ygwbl)
-
