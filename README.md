@@ -8,10 +8,6 @@
 
 ---
 
-![仪表盘预览](docs/dashboard-preview.jpg)
-
----
-
 ## ✨ 核心功能
 
 | 功能 | 说明 |
@@ -107,3 +103,4 @@ Claude 请求  →  选 Claude percentRemaining 最高的账号
 ## License
 
 MIT © [ygwbl](https://github.com/ygwbl)
+
