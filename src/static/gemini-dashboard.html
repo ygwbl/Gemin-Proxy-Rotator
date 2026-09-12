@@ -2572,6 +2572,13 @@
         if (claudePct <= 10) claudeBarClass = 'warn';
         if (claudePct === 0) claudeBarClass = 'zero';
 
+        // 动态标签：根据实际 timerType 显示正确的配额池名称
+        const claudeTimerType  = claude ? (claude.timerType || '7d') : '7d';
+        const gemTimerType     = gem   ? (gem.timerType   || '5h') : '5h';
+        const claudePoolLabel  = claudeTimerType === '5h' ? 'Claude / 5小时核心水位' : 'Claude / 7天周配额池';
+        const claudePeriodLabel= claudeTimerType === '5h' ? '5小时窗口水位'         : '周周期水位';
+        const gemPoolLabel     = gemTimerType   === '7d' ? 'Gemini / 7天周配额'    : 'Gemini / 5小时核心水位';
+
         // 🛡️ 每日安全防封预算计算 (标准 300 次软上限)
         const dailyReq = acc.dailyRequestCount || 0;
         const dailyMax = 300;
@@ -2672,10 +2679,10 @@
             </div>
           </div>
 
-          <!-- 第 3 行：Claude / 7天周配额 -->
+          <!-- 第 3 行：Claude 配额（timerType 动态：5h 或 7d） -->
           <div class="quota-box" style="background:#faf5ff;border-color:#7c3aed;">
             <div class="quota-box-header">
-              <span style="color:#6b21a8;">📅 Claude / 7天周配额池</span>
+              <span style="color:#6b21a8;">📅 ${claudePoolLabel}</span>
               <strong style="color:#7c3aed;font-family:'JetBrains Mono',monospace;">${claudePct}%</strong>
             </div>
             <div class="quota-track-wrap">
@@ -2684,7 +2691,7 @@
               </div>
             </div>
             <div class="quota-meta-row">
-              <span style="color:#7c3aed;">周周期水位</span>
+              <span style="color:#7c3aed;">${claudePeriodLabel}</span>
               <span>⏳ ${formatTime(claude ? claude.resetTime : null)}</span>
             </div>
           </div>
