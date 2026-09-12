@@ -2422,12 +2422,24 @@
       const accounts = data.accounts;
 
       // 判断哪个账号是"当前正在使用"
-      // 策略1: 优先使用后端 activeForModels 字段（路由层真实状态）
-      let activeAcc = accounts.find(a => a.activeForModels && a.activeForModels.length > 0) || null;
+      // 策略①: lastUsed 最近的账号 = 反重力/Cursor 最新实际路由的账号（跟着真实请求走）
+      let activeAcc = null;
       let activeGemPct = 0;
+      const now = Date.now();
 
+      // 找出最近 60 秒内有过真实请求的账号（lastUsed 最大且 > 0）
+      let maxLastUsed = 0;
+      accounts.forEach(a => {
+        const lu = a.lastUsed || 0;
+        if (lu > maxLastUsed) { maxLastUsed = lu; activeAcc = a; }
+      });
+      // 若最近请求超过 60 秒前（空闲状态），不视为"实时在用"，改用策略②
+      if (!activeAcc || maxLastUsed === 0 || (now - maxLastUsed) > 60000) {
+        // 策略②: 后端路由层 activeForModels 字段
+        activeAcc = accounts.find(a => a.activeForModels && a.activeForModels.length > 0) || null;
+      }
       if (!activeAcc) {
-        // 策略2: 无 activeForModels 时，综合评分（Gemini×2 + Claude×1），避免 0% 平局选错号
+        // 策略③: 综合评分兜底（Gemini×2 + Claude×1），避免 0% 平局选错号
         let bestScore = -Infinity;
         accounts.forEach(a => {
           const gem = (a.quota || []).find(q => q.modelKey === 'gemini');
