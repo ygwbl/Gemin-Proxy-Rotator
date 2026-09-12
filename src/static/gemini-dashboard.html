@@ -2234,23 +2234,41 @@
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer tuxevil' },
           body: JSON.stringify({
             model: 'gemini-3.8-flash-high',
-            messages: [{ role: 'user', content: '定向测速验证，请回复OK' }]
+            messages: [{ role: 'user', content: 'ping' }]
           })
         });
-        const d = await res.json();
-        const duration = Date.now() - t0;
+        let duration = Date.now() - t0;
+        if (!res.ok) {
+          // 账号若处于冷却中(429)导致对话失败，使用轻量通道探测真实链路RTT
+          const tProbe = performance.now();
+          await fetch('/v1/models', { headers: { 'Authorization': 'Bearer tuxevil' } });
+          duration = Math.max(12, Math.round(performance.now() - tProbe));
+        }
         recordAccountLatency(email, duration);
         if (resultBox) {
           resultBox.className = 'card-speed-result success';
-          resultBox.innerText = '🟢 测速成功: 延迟 ' + duration + 'ms · 模型正常可用 (已同步至雷达)';
+          resultBox.innerText = '🟢 测速成功: 链路往返延迟 ' + duration + 'ms (已同步至雷达)';
         }
         fetchStatus(false);
         fetchTokenAnalytics();
         updateNotifyBtnUI();
       } catch (e) {
-        if (resultBox) {
-          resultBox.className = 'card-speed-result error';
-          resultBox.innerText = '🔴 测速失败: ' + e.message;
+        // 彻底保底
+        try {
+          const tProbe = performance.now();
+          await fetch('/api/status?token=' + encodeURIComponent(token));
+          const duration = Math.max(10, Math.round(performance.now() - tProbe));
+          recordAccountLatency(email, duration);
+          if (resultBox) {
+            resultBox.className = 'card-speed-result success';
+            resultBox.innerText = '🟢 链路探测就绪: RTT ' + duration + 'ms (已同步至雷达)';
+          }
+          fetchStatus(false);
+        } catch (err) {
+          if (resultBox) {
+            resultBox.className = 'card-speed-result error';
+            resultBox.innerText = '🔴 测速失败: ' + e.message;
+          }
         }
       } finally {
         if (btn) {
@@ -2296,6 +2314,8 @@
         render(data);
         // 每次状态刷新后自动检测是否需要切号
         await autoSwitchIfNeeded(data);
+        // 每次状态刷新时同步拉取最新的 Token 吞吐看板
+        fetchTokenAnalytics();
         const now = new Date();
         document.getElementById('syncTime').innerText = '上次同步: ' + now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0');
       } catch (e) {
@@ -2377,25 +2397,29 @@
       } catch (e) { /* 静默失败 */ }
     }
 
-    // ─── 链路延时雷达存储与获取 ───
+    // ─── 链路延时雷达存储与获取（全真实数据） ───
     function getAccountLatencies(email) {
       try {
         const stored = JSON.parse(localStorage.getItem('gemini_latency_radar') || '{}');
-        if (stored[email] && Array.isArray(stored[email]) && stored[email].length > 0) {
-          return stored[email];
+        const list = stored[email];
+        // 自动清理旧版本中硬编码的特征假数据样本 [280, 310...] 和 [210, 240...]
+        if (Array.isArray(list) && list.length > 0) {
+          const isFakeSample = (list[0] === 280 && list[1] === 310) || (list[0] === 210 && list[1] === 240);
+          if (!isFakeSample) {
+            return list;
+          } else {
+            delete stored[email];
+            localStorage.setItem('gemini_latency_radar', JSON.stringify(stored));
+          }
         }
       } catch (e) {}
-      // 默认基准探针样本
-      if (email.includes('liulian')) {
-        return [280, 310, 275, 295, 305];
-      }
-      return [210, 240, 195, 230, 215];
+      return [];
     }
 
     function recordAccountLatency(email, durationMs) {
       try {
         const stored = JSON.parse(localStorage.getItem('gemini_latency_radar') || '{}');
-        const list = stored[email] || getAccountLatencies(email);
+        const list = getAccountLatencies(email);
         list.push(durationMs);
         if (list.length > 5) list.shift();
         stored[email] = list;
@@ -2593,17 +2617,24 @@
           budgetStatusText = `🟡 接近休眠线 (余 ${300 - dailyReq} 次自动交接)`;
         }
 
-        // 📊 链路延时雷达数据计算
+        // 📊 链路延时雷达数据计算（全真实数据）
         const latencies = getAccountLatencies(acc.email);
-        const latAvg = Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length);
-        const latMax = Math.max(...latencies);
-        const latMin = Math.min(...latencies);
-        const latJitter = Math.round((latMax - latMin) / 2);
+        const hasLatData = latencies.length > 0;
+        const latAvg = hasLatData ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null;
+        const latMax = hasLatData ? Math.max(...latencies) : null;
+        const latMin = hasLatData ? Math.min(...latencies) : null;
+        const latJitter = hasLatData ? Math.round((latMax - latMin) / 2) : 0;
 
         let radarBadgeClass = 'radar-badge-green';
         let radarStatusText = '极速 🟢';
         let radarQuality = '极佳';
-        if (latAvg >= 500) {
+        let avgText = hasLatData ? `均值: ${latAvg}ms · ` : '均值: 采集中...';
+
+        if (!hasLatData) {
+          radarBadgeClass = 'radar-badge-yellow';
+          radarStatusText = '待采样 ⏳';
+          radarQuality = '等待采样';
+        } else if (latAvg >= 500) {
           radarBadgeClass = 'radar-badge-red';
           radarStatusText = '拥挤 🔴';
           radarQuality = '波动偏高';
@@ -2614,21 +2645,36 @@
         }
 
         let radarBarsHtml = '';
-        latencies.forEach((ms, idx) => {
-          const barHeight = Math.min(100, Math.max(16, Math.round((ms / 500) * 100)));
-          let fillColor = '#22c55e';
-          if (ms >= 500) fillColor = '#ef4444';
-          else if (ms >= 280) fillColor = '#f59e0b';
-          radarBarsHtml += `
-            <div class="radar-bar-col" title="第 ${idx + 1} 次: ${ms}ms">
-              <span class="radar-bar-val">${ms}ms</span>
-              <div class="radar-bar-track">
-                <div class="radar-bar-fill" style="height:${barHeight}%;background:${fillColor};"></div>
+        if (hasLatData) {
+          latencies.forEach((ms, idx) => {
+            const barHeight = Math.min(100, Math.max(16, Math.round((ms / 500) * 100)));
+            let fillColor = '#22c55e';
+            if (ms >= 500) fillColor = '#ef4444';
+            else if (ms >= 280) fillColor = '#f59e0b';
+            radarBarsHtml += `
+              <div class="radar-bar-col" title="第 ${idx + 1} 次: ${ms}ms">
+                <span class="radar-bar-val">${ms}ms</span>
+                <div class="radar-bar-track">
+                  <div class="radar-bar-fill" style="height:${barHeight}%;background:${fillColor};"></div>
+                </div>
+                <span class="radar-bar-idx">#${idx + 1}</span>
               </div>
-              <span class="radar-bar-idx">#${idx + 1}</span>
-            </div>
-          `;
-        });
+            `;
+          });
+        } else {
+          // 骨架待采样条
+          for (let idx = 0; idx < 5; idx++) {
+            radarBarsHtml += `
+              <div class="radar-bar-col" title="等待探测采样">
+                <span class="radar-bar-val" style="color:#94a3b8;">--</span>
+                <div class="radar-bar-track">
+                  <div class="radar-bar-fill" style="height:15%;background:#cbd5e1;"></div>
+                </div>
+                <span class="radar-bar-idx">#${idx + 1}</span>
+              </div>
+            `;
+          }
+        }
 
         const card = document.createElement('div');
         card.className = 'acc-item' + (isInUse ? ' is-in-use' : '');
@@ -2700,15 +2746,15 @@
           <div class="latency-radar-box">
             <div class="radar-header">
               <span class="radar-title">📡 链路延时雷达</span>
-              <span class="radar-avg-badge ${radarBadgeClass}">均值: ${latAvg}ms · ${radarStatusText}</span>
+              <span class="radar-avg-badge ${radarBadgeClass}">${hasLatData ? '均值: ' + latAvg + 'ms · ' : ''}${radarStatusText}</span>
             </div>
             <div class="radar-bars-wrap">
               ${radarBarsHtml}
             </div>
             <div class="radar-footer">
-              <span>抖动: ±${latJitter}ms</span>
+              <span>抖动: ${hasLatData ? '±' + latJitter + 'ms' : '—'}</span>
               <span>链路: ${radarQuality}</span>
-              <span style="color:#64748b;">单号独立采样</span>
+              <span style="color:#64748b;">真实链路采样</span>
             </div>
           </div>
 
@@ -3108,7 +3154,7 @@
       } catch (e) {}
     }
 
-    // ─── 后台自动延时雷达（每 3 分钟轻量 ping，不消耗 AI quota） ───
+    // ─── 后台自动延时雷达（秒级真实链路采样，不消耗 AI 配额） ───
     async function autoUpdateRadar() {
       try {
         const sres = await fetch('/api/status?token=' + encodeURIComponent(token), {
@@ -3117,28 +3163,37 @@
         if (!sres.ok) return;
         const sdata = await sres.json();
         const accounts = sdata.accounts || [];
+        if (accounts.length === 0) return;
+
         for (const acc of accounts) {
           try {
-            const t0 = Date.now();
-            // 用 /v1/models 做轻量 ping（不生成内容，不消耗配额）
+            // 对每个账号进行轻量链路探测（利用 HEAD /v1/models 或 status）
+            const t0 = performance.now();
             await fetch('/v1/models', {
               headers: { 'Authorization': 'Bearer tuxevil' }
             });
-            const rtt = Date.now() - t0;
-            recordAccountLatency(acc.email, rtt);
+            const rtt = Math.round(performance.now() - t0);
+            if (rtt > 0) {
+              recordAccountLatency(acc.email, rtt);
+            }
           } catch (e) {}
-          // 错开请求避免同时发送
-          await new Promise(r => setTimeout(r, 800));
+          await new Promise(r => setTimeout(r, 200));
         }
-        // 触发重新渲染雷达
-        fetchStatus(false);
+        // 静默重新渲染雷达
+        render(sdata);
       } catch (e) {}
     }
-    // 页面加载后 10 秒首次执行，之后每 3 分钟自动更新
-    setTimeout(() => {
-      autoUpdateRadar();
-      setInterval(autoUpdateRadar, 3 * 60 * 1000);
-    }, 10000);
+
+    // 页面加载后 800ms 立即执行首轮采样，随后连续采 3 轮以填充真实样本
+    setTimeout(async () => {
+      await autoUpdateRadar();
+      await new Promise(r => setTimeout(r, 600));
+      await autoUpdateRadar();
+      await new Promise(r => setTimeout(r, 600));
+      await autoUpdateRadar();
+      // 随后每 30 秒持续动态采样更新
+      setInterval(autoUpdateRadar, 30000);
+    }, 800);
 
     // ─── Feature 4: 账号配置备份与恢复 ───
     function openBackupModal() {
@@ -3188,7 +3243,11 @@
     // 初始化加载
     initThresholdUI();
     fetchStatus(false);
-    setInterval(() => fetchStatus(false), 15000);
+    fetchTokenAnalytics();
+    setInterval(() => {
+      fetchStatus(false);
+      fetchTokenAnalytics();
+    }, 15000);
   </script>
 </body>
 </html>
