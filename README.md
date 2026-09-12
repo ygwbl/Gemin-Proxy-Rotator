@@ -10,9 +10,7 @@
 
 ## 📸 界面预览
 
-![总览面板](docs/screenshot1.png)
-
-![账号详情 + 延时雷达](docs/screenshot2.png)
+![仪表盘全览](docs/screenshot1.png)
 
 ---
 
@@ -110,3 +108,4 @@ Claude 请求  →  选 Claude percentRemaining 最高的账号
 ## License
 
 MIT © [ygwbl](https://github.com/ygwbl)
+
