@@ -2294,6 +2294,8 @@
           initThresholdUI();
         }
         render(data);
+        // 每次状态刷新后自动检测是否需要切号
+        await autoSwitchIfNeeded(data);
         const now = new Date();
         document.getElementById('syncTime').innerText = '上次同步: ' + now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0');
       } catch (e) {
@@ -2301,6 +2303,78 @@
       } finally {
         if (btn) btn.innerText = '🔄 实时同步最新配额';
       }
+    }
+
+    // ─── 配额阈值自动切号（跟随反重力） ───
+    let _lastAutoSwitchEmail = null; // 防止重复切换同一账号
+    async function autoSwitchIfNeeded(data) {
+      try {
+        const accounts = (data && data.accounts) || [];
+        if (accounts.length < 2) return;
+
+        // 找当前主力账号（与 render 同逻辑）
+        const now = Date.now();
+        let activeAcc = null;
+        let maxLastUsed = 0;
+        accounts.forEach(a => {
+          const lu = a.lastUsed || 0;
+          if (lu > maxLastUsed) { maxLastUsed = lu; activeAcc = a; }
+        });
+        if (!activeAcc || maxLastUsed === 0 || (now - maxLastUsed) > 60000) {
+          activeAcc = accounts.find(a => a.activeForModels && a.activeForModels.length > 0) || accounts[0];
+        }
+        if (!activeAcc) return;
+
+        // 检查主力账号的 Gemini + Claude 综合水位
+        const gem = (activeAcc.quota || []).find(q => q.modelKey === 'gemini');
+        const cla = (activeAcc.quota || []).find(q => q.modelKey === 'claude');
+        const gPct = gem ? (gem.percentRemaining ?? 0) : 0;
+        const cPct = cla ? (cla.percentRemaining ?? 0) : 0;
+        const activePct = Math.max(gPct, cPct); // 任一还有余量就不切
+
+        // 当主力账号余量 ≤ 阈值时，找最优备用账号
+        if (activePct <= currentThreshold) {
+          let bestAcc = null;
+          let bestScore = -Infinity;
+          accounts.forEach(a => {
+            if (a.email === activeAcc.email) return; // 排除当前账号
+            const g = (a.quota || []).find(q => q.modelKey === 'gemini');
+            const c = (a.quota || []).find(q => q.modelKey === 'claude');
+            const gp = g ? (g.percentRemaining ?? 0) : 0;
+            const cp = c ? (c.percentRemaining ?? 0) : 0;
+            const score = gp * 2 + cp * 1;
+            if (score > bestScore) { bestScore = score; bestAcc = a; }
+          });
+
+          if (!bestAcc) return;
+          // 防止对同一目标账号重复触发
+          if (_lastAutoSwitchEmail === bestAcc.email) return;
+          _lastAutoSwitchEmail = bestAcc.email;
+
+          // 调用切换 API
+          const r = await fetch('/api/switch-account/' + encodeURIComponent(bestAcc.email), {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          const rd = await r.json();
+          if (rd.ok) {
+            showToast(
+              '⚡ 已自动切号',
+              activeAcc.email.split('@')[0] + ' 余量已降至 ' + activePct + '%（≤阈值 ' + currentThreshold + '%），已自动切换至 ' + bestAcc.email
+            );
+            // 桌面通知
+            if (Notification && Notification.permission === 'granted') {
+              new Notification('⚡ 反重力自动切号', {
+                body: '已从 ' + activeAcc.email + ' 切换至 ' + bestAcc.email,
+                icon: '/favicon.ico'
+              });
+            }
+          }
+        } else {
+          // 余量恢复后重置，允许下次再触发
+          _lastAutoSwitchEmail = null;
+        }
+      } catch (e) { /* 静默失败 */ }
     }
 
     // ─── 链路延时雷达存储与获取 ───
