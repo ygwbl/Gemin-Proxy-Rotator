@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<!--
+  列宾 · 三变体确认样张
+  产品：Gemini 智能代理轮换网关 (Gemini Rotator)
+  轴：视觉隐喻与信息承载密度
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gemini 代理轮换网关 · 设计方向确认 (列宾样张)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --bg:#f8fafc; --accent:#2563eb;
+    --col-gap:20px; --stage-w:1280px; --stage-h:860px;
+    --stage-ar:1280/860;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    line-height:1.75;}
+  header{padding:28px 40px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(248,250,252,0.92);backdrop-filter:blur(10px);z-index:20}
+  h1{font-size:20px;margin:0 0 6px;font-weight:700;letter-spacing:0}
+  .axis{font-size:13.5px;color:var(--muted);margin:0}
+  .axis b{color:var(--ink);font-weight:600}
+  .hint-read{font-size:13px;color:var(--muted);margin:10px 0 0;line-height:1.6}
+
+  /* 九格棋盘：列＝变体，行＝屏。九屏同时可见 */
+  .board{display:grid;grid-template-columns:84px repeat(3,1fr);gap:16px var(--col-gap);
+    align-items:start;padding:24px 40px 40px}
+  .rowlab{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--muted);padding-top:4px}
+  .vhead,.cell{min-width:0;margin:0}
+  .vhead .name{font-size:16px;font-weight:700;margin-bottom:4px}
+  .vhead .desc{font-size:12.5px;color:var(--muted);line-height:1.6;min-height:2.6em}
+  .frame{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;
+    position:relative;aspect-ratio:var(--stage-ar);box-shadow:0 4px 12px rgba(0,0,0,0.03)}
+  .stage{width:var(--stage-w);height:var(--stage-h);transform-origin:0 0;position:absolute;top:0;left:0}
+  .stage > .screen{width:100%;height:100%;overflow:hidden;background:#fff}
+
+  /* ── 确认区 ── */
+  .confirm{border-top:1px solid var(--line);padding:36px 40px 80px;max-width:860px;margin:0 auto}
+  .confirm h2{font-size:18px;margin:0 0 4px;font-weight:700}
+  .confirm .hint{font-size:13px;color:var(--muted);margin:0 0 28px}
+  .q{margin-bottom:26px}
+  .q .ttl{font-size:14px;font-weight:700;margin:0 0 4px}
+  .q .why{font-size:12.5px;color:var(--muted);margin:0 0 10px}
+  .q select,.q .other{width:100%;font:inherit;font-size:14px;padding:10px 14px;
+    border:1px solid var(--line);border-radius:8px;background:#fff}
+  .opts{display:flex;flex-wrap:wrap;gap:8px}
+  .opts label{display:inline-flex;align-items:center;gap:7px;padding:8px 16px 8px 12px;border:1px solid var(--line);
+    border-radius:999px;cursor:pointer;font-size:13.5px;line-height:1.45;background:#fff;user-select:none;transition:all .15s}
+  .opts input{margin:0;accent-color:var(--accent);flex:none}
+  .opts label:has(:checked){border-color:var(--accent);background:var(--accent);color:#fff}
+  .other{display:none;margin-top:10px}
+  .q:has([data-other]:checked) .other{display:block}
+  .copy{font:inherit;font-size:14px;font-weight:600;padding:12px 28px;border:none;border-radius:999px;
+    background:var(--accent);color:#fff;cursor:pointer;transition:background .15s}
+  .copy:hover{background:#1d4ed8}
+  .copied{font-size:13px;color:var(--muted);margin-left:12px}
+
+  /* ================= 变体一通用样式：极简通透 (贴着做) ================= */
+  .s-clean{background:#fafaf9;color:#1c1917;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:36px 44px;display:flex;flex-direction:column;gap:28px}
+  .c-header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1px solid #e7e5e4;padding-bottom:20px}
+  .c-brand{font-size:20px;font-weight:600;letter-spacing:-0.02em}
+  .c-meta{font-size:13px;color:#78716c}
+  .c-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .c-box{background:#ffffff;border:1px solid #e7e5e4;border-radius:8px;padding:24px}
+  .c-label{font-size:12px;color:#78716c;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px}
+  .c-val{font-size:28px;font-weight:600;font-family:'JetBrains Mono',monospace}
+  .c-card{background:#ffffff;border:1px solid #e7e5e4;border-radius:8px;padding:22px 26px;display:flex;justify-content:space-between;align-items:center}
+  .c-line-bar{width:100%;height:6px;background:#f5f5f4;border-radius:3px;overflow:hidden;margin-top:10px}
+  .c-line-fill{height:100%;background:#1c1917;border-radius:3px}
+
+  /* ================= 变体二通用样式：现代卡片与流光 (取其神) ================= */
+  .s-card{background:#f8fafc;color:#0f172a;padding:36px 44px;display:flex;flex-direction:column;gap:24px}
+  .m-header{display:flex;justify-content:space-between;align-items:center;background:#ffffff;border:1px solid #e2e8f0;padding:18px 28px;border-radius:16px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.03)}
+  .m-logo{display:flex;align-items:center;gap:12px;font-size:18px;font-weight:700}
+  .m-gemini-icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#2563eb,#7c3aed,#db2777);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 10px rgba(37,99,235,0.25)}
+  .m-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .m-stat{background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:20px;box-shadow:0 2px 4px rgba(0,0,0,0.02)}
+  .m-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600}
+  .m-pill-green{background:#ecfdf5;color:#059669;border:1px solid #a7f3d0}
+  .m-pill-blue{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+  .m-account-card{background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;box-shadow:0 4px 12px rgba(0,0,0,0.04);position:relative}
+  .m-account-card.active{border:2px solid #2563eb}
+  .m-progress{width:100%;height:10px;background:#f1f5f9;border-radius:999px;overflow:hidden;margin:12px 0 6px}
+  .m-fill{height:100%;background:linear-gradient(90deg,#2563eb,#7c3aed);border-radius:999px}
+
+  /* ================= 变体三通用样式：高密度工业终端 (反着来) ================= */
+  .s-mono{background:#f4f4f5;color:#18181b;font-family:'JetBrains Mono',monospace;padding:30px 36px;display:flex;flex-direction:column;gap:18px}
+  .t-bar{background:#ffffff;border:1px solid #d4d4d8;padding:12px 20px;border-radius:4px;display:flex;justify-content:space-between;align-items:center;font-size:13px}
+  .t-table{width:100%;border-collapse:collapse;background:#ffffff;border:1px solid #d4d4d8;border-radius:4px;overflow:hidden;font-size:12.5px}
+  .t-table th{background:#fafafa;text-align:left;padding:10px 16px;border-bottom:1px solid #d4d4d8;color:#71717a;font-weight:600}
+  .t-table td{padding:12px 16px;border-bottom:1px solid #f4f4f5}
+  .t-tag{padding:2px 6px;border-radius:2px;font-size:11px;font-weight:600}
+  .t-tag-ok{background:#dcfce7;color:#15803d;border:1px solid #86efac}
+  .t-tag-warn{background:#fef3c7;color:#b45309;border:1px solid #fcd34d}
+  .t-tag-bad{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5}
+  .t-block{background:#ffffff;border:1px solid #d4d4d8;padding:16px 20px;border-radius:4px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Gemini 代理轮换网关 · 三个方案，请选一个</h1>
+  <p class="axis">这三个方案沿同一条轴排开：<b>视觉隐喻与信息承载密度</b>。根据你提出的「纯净浅色模式、专为 Gemini 打造」要求，从极简通透、到现代流光卡片、再到高密度工程控制台分三级拉开。</p>
+  <p class="hint-read">九屏全在这一页上，不用切换：<b>横着看</b>三版在同一屏上的差别，<b>竖着看</b>一版从首屏到极值状态撑不撑得住。</p>
+</header>
+
+<div class="board">
+  <!-- 第一行：三版名字和定位 -->
+  <div class="rowlab"></div>
+  <div class="vhead">
+    <div class="name">贴着做</div>
+    <div class="desc">极简通透工作台 (Clean Studio) · 极致留白与纯净克制，类似 Notion / Apple 设置</div>
+  </div>
+  <div class="vhead">
+    <div class="name">取其神</div>
+    <div class="desc">现代流光卡片 (Modern Flow) · Google Gemini 蓝紫渐变与精致多层卡片，兼具美感与功能</div>
+  </div>
+  <div class="vhead">
+    <div class="name">反着来</div>
+    <div class="desc">紧凑工程终端 (Monospace Data Grid) · 高密度等宽数据表格与状态灯，极低视觉噪音</div>
+  </div>
+
+  <!-- 行 2：首屏 / 概览 -->
+  <div class="rowlab">首屏<br><span style="font-weight:normal;color:#94a3b8">运行态势</span></div>
+  
+  <!-- 贴着做 · 首屏 -->
+  <figure class="cell"><div class="frame"><div class="stage"><div class="screen s-clean">
+    <div class="c-header">
+      <div>
+        <div class="c-brand">Gemini Proxy Rotator</div>
+        <div class="c-meta">端口 51200 · 本地监听 127.0.0.1 · 负载均衡已激活</div>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:#15803d">● 全部账号就绪</div>
+    </div>
+    <div class="c-grid">
+      <div class="c-box">
+        <div class="c-label">当前活跃分流</div>
+        <div class="c-val" style="font-size:22px">sxltxaj</div>
+        <div style="font-size:12px;color:#78716c;margin-top:6px">Gemini 额度 100% · 满血承接</div>
+      </div>
+      <div class="c-box">
+        <div class="c-label">今日总请求</div>
+        <div class="c-val">1</div>
+        <div style="font-size:12px;color:#78716c;margin-top:6px">输入 5 tokens · 输出 19 tokens</div>
+      </div>
+      <div class="c-box">
+        <div class="c-label">平均响应延迟</div>
+        <div class="c-val">2.2s</div>
+        <div style="font-size:12px;color:#78716c;margin-top:6px">TTFB p50: 2249ms · 首字极速</div>
+      </div>
+    </div>
+    <div style="margin-top:10px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:14px;color:#44403c">双账号配额水位</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="c-card">
+          <div>
+            <div style="font-weight:600;font-size:15px">sxltxaj@gmail.com</div>
+            <div style="font-size:12px;color:#78716c">主承接账号 · 项目 aicode-consumers</div>
+          </div>
+          <div style="width:280px;text-align:right">
+            <div style="font-weight:600;font-family:'JetBrains Mono'">Gemini 100%</div>
+            <div class="c-line-bar"><div class="c-line-fill" style="width:100%"></div></div>
+          </div>
+        </div>
+        <div class="c-card">
+          <div>
+            <div style="font-weight:600;font-size:15px">liulian0203@gmail.com</div>
+            <div style="font-size:12px;color:#78716c">候补冷却 · 项目 aicode-consumers</div>
+          </div>
+          <div style="width:280px;text-align:right">
+            <div style="font-weight:600;font-family:'JetBrains Mono'">Gemini 12% · 3h30m后重置</div>
+            <div class="c-line-bar"><div class="c-line-fill" style="width:12%;background:#78716c"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div></div></figure>
+
+  <!-- 取其神 · 首屏 -->
+  <figure class="cell"><div class="frame"><div class="stage"><div class="screen s-card">
+    <div class="m-header">
+      <div class="m-logo">
+        <div class="m-gemini-icon">✦</div>
+        <div>
+          <div>Gemini 智能代理轮换控制台</div>
+          <div style="font-size:12px;color:#64748b;font-weight:normal">双账号配额实时感应 · 端口 51200</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <span class="m-pill m-pill-green">● 代理网关运行中</span>
+        <span class="m-pill m-pill-blue">轮换策略: timer-first</span>
+      </div>
+    </div>
+    <div class="m-grid">
+      <div class="m-stat">
+        <div style="font-size:12px;color:#64748b;margin-bottom:6px">Gemini 活跃池</div>
+        <div style="font-size:24px;font-weight:700">2 个账号</div>
+        <div style="font-size:12px;color:#059669;margin-top:4px">全健康运转中</div>
+      </div>
+      <div class="m-stat">
+        <div style="font-size:12px;color:#64748b;margin-bottom:6px">当前主力调度</div>
+        <div style="font-size:22px;font-weight:700;color:#2563eb">sxltxaj</div>
+        <div style="font-size:12px;color:#64748b;margin-top:4px">配额: 100% 满血</div>
+      </div>
+      <div class="m-stat">
+        <div style="font-size:12px;color:#64748b;margin-bottom:6px">今日调用量</div>
+        <div style="font-size:24px;font-weight:700;font-family:'JetBrains Mono'">1 次</div>
+        <div style="font-size:12px;color:#64748b;margin-top:4px">总 Token: 24</div>
+      </div>
+      <div class="m-stat">
+        <div style="font-size:12px;color:#64748b;margin-bottom:6px">首字耗时 TTFB</div>
+        <div style="font-size:24px;font-weight:700;font-family:'JetBrains Mono'">2.2s</div>
+        <div style="font-size:12px;color:#059669;margin-top:4px">gemini-3.8-flash</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:10px">
+      <div class="m-account-card active">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-weight:700;font-size:16px">sxltxaj@gmail.com</div>
+          <span class="m-pill m-pill-blue">⚡ 主力承接</span>
+        </div>
+        <div style="font-size:12px;color:#64748b;margin-top:2px">绑定工程: aicode-consumers</div>
+        <div class="m-progress"><div class="m-fill" style="width:100%"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b">
+          <span>Gemini 5小时额度: <strong style="color:#2563eb">100%</strong></span>
+          <span>状态: 充盈满血</span>
+        </div>
+      </div>
+      <div class="m-account-card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-weight:700;font-size:16px">liulian0203@gmail.com</div>
+          <span class="m-pill" style="background:#f1f5f9;color:#64748b">候补就绪</span>
+        </div>
+        <div style="font-size:12px;color:#64748b;margin-top:2px">绑定工程: aicode-consumers</div>
+        <div class="m-progress"><div class="m-fill" style="width:12%;background:#f59e0b"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b">
+          <span>Gemini 5小时额度: <strong style="color:#f59e0b">12%</strong></span>
+          <span>⏳ 约 3小时20分后重置</span>
+        </div>
+      </div>
+    </div>
+  </div></div></div></figure>
+
+  <!-- 反着来 · 首屏 -->
+  <figure class="cell"><div class="frame"><div class="stage"><div class="screen s-mono">
+    <div class="t-bar">
+      <div><strong>[SYSTEM: RUNNING]</strong> :: GEMINI_ROTATOR :: PORT: 51200 :: ENGINE_V3.7</div>
+      <div>UPTIME: 0h 14m :: POLICY: TIMER_FIRST :: POOL_HEALTH: 100%</div>
+    </div>
+    <div style="font-size:13px;font-weight:700;color:#52525b">ACTIVE ACCOUNT FLEET (2 NODES)</div>
+    <table class="t-table">
+      <thead>
+        <tr>
+          <th>ACCOUNT IDENTITY</th>
+          <th>PROJECT</th>
+          <th>ROLE</th>
+          <th>GEMINI POOL</th>
+          <th>CLAUDE POOL</th>
+          <th>RESET ETA</th>
+          <th>STATUS</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>sxltxaj@gmail.com</strong></td>
+          <td>aicode-consumers</td>
+          <td><span class="t-tag t-tag-ok">PRIMARY</span></td>
+          <td><strong style="color:#15803d">100% (FRESH)</strong></td>
+          <td>33%</td>
+          <td>--</td>
+          <td>READY_ACTIVE</td>
+        </tr>
+        <tr>
+          <td><strong>liulian0203@gmail.com</strong></td>
+          <td>aicode-consumers</td>
+          <td><span class="t-tag t-tag-warn">STANDBY</span></td>
+          <td><strong style="color:#b45309">12% (LOW)</strong></td>
+          <td>100%</td>
+          <td>198m</td>
+          <td>COOLDOWN_PROTECT</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="t-block" style="margin-top:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px">
+        <span>TOTAL_REQUESTS: 1</span>
+        <span>IN_TOKENS: 5</span>
+        <span>OUT_TOKENS: 19</span>
+        <span>TTFB_P50: 2249ms</span>
+        <span>LAST_ROUTE: -> liulian0203</span>
+      </div>
+      <div style="background:#fafafa;padding:8px 12px;border:1px solid #e4e4e7;border-radius:2px;font-size:11.5px;color:#71717a">
+        [14:01:00] POLL sxltxaj@gmail.com -> Gemini: 100% fresh | Claude: 33% (7218m)<br>
+        [14:01:01] POLL liulian0203@gmail.com -> Gemini: 12% (218m) | Claude: 100% (fresh)
+      </div>
+    </div>
+  </div></div></div></figure>
+
+  <!-- 行 3：核心操作屏 -->
+  <div class="rowlab">操作屏<br><span style="font-weight:normal;color:#94a3b8">配置与测试</span></div>
+
+  <!-- 贴着做 · 操作屏 -->
+  <figure class="cell"><div class="frame"><div class="stage"><div class="screen s-clean">
+    <div class="c-header">
+      <div class="c-brand">连接参数与在线调试</div>
+      <div class="c-meta">支持 Cursor, Claude Code, Cline, Roo Code</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+      <div class="c-box">
+        <div class="c-label">客户端配置参数 (一键复制)</div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+          <div style="background:#f5f5f4;padding:10px 14px;border-radius:6px;font-size:13px;display:flex;justify-content:space-between">
+            <span style="color:#78716c">Base URL</span>
+            <strong style="font-family:'JetBrains Mono'">http://127.0.0.1:51200/v1</strong>
+          </div>
+          <div style="background:#f5f5f4;padding:10px 14px;border-radius:6px;font-size:13px;display:flex;justify-content:space-between">
+            <span style="color:#78716c">API Key</span>
+            <strong style="font-family:'JetBrains Mono'">tuxevil</strong>
+          </div>
+          <div style="background:#f5f5f4;padding:10px 14px;border-radius:6px;font-size:13px;display:flex;justify-content:space-between">
+            <span style="color:#78716c">推荐模型</span>
+            <strong style="font-family:'JetBrains Mono'">gemini-3.8-flash-high</strong>
+          </div>
+        </div>
+      </div>
+      <div class="c-box">
+        <div class="c-label">快速连接测试</div>
+        <div style="margin-top:14px">
+          <input type="text" value="请回复两个字：收到" style="width:100%;padding:10px 12px;border:1px solid #e7e5e4;border-radius:6px;font-size:13px;outline:none" readonly>
+          <button style="width:100%;margin-top:10px;padding:10px;background:#1c1917;color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer">发送测试请求</button>
+          <div style="margin-top:12px;padding:10px;background:#f5f5f4;border-radius:6px;font-size:12px;color:#44403c">
+            ✅ 200 OK · 耗时 2250ms · 承接账号: sxltxaj<br>
+            回复: "测试成功！连接正常，随时为您服务。"
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div></div></figure>
+
+  <!-- 取其神 · 操作屏 -->
+  <figure class="cell"><div class="frame"><div class="stage"><div class="screen s-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:18px;font-weight:700">🚀 实时调度与接入面板</div>
+      <div style="font-size:13px;color:#64748b">模型支持思考链可视化输出</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:20px">
+      <div class="m-account-card" style="box-shadow:none">
+        <div style="font-weight:700;margin-bottom:12px">下游 Agent 参数配置</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;padding:10px 14px;border-radius:8px;font-size:13px">
+            <div><span style="color:#64748b">Base URL: </span><code style="color:#2563eb;font-weight:600">http://localhost:51200/v1</code></div>
+            <span style="background:#fff;border:1px solid #cbd5e1;padding:2px 8px;border-radius:4px;font-size:11px;cursor:pointer">复制</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;padding:10px 14px;border-radius:8px;font-size:13px">
+            <div><span style="color:#64748b">API Key: </span><code style="color:#2563eb;font-weight:600">tuxevil</code></div>
+            <span style="background:#fff;border:1px solid #cbd5e1;padding:2px 8px;border-radius:4px;font-size:11px;cursor:pointer">复制</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;padding:10px 14px;border-radius:8px;font-size:13px">
+            <div><span style="color:#64748b">默认模型: </span><code style="color:#2563eb;font-weight:600">gemini-3.8-flash-high</code></div>
+            <span style="background:#fff;border:1px solid #cbd5e1;padding:2px 8px;border-radius:4px;font-size:11px;cursor:pointer">复制</span>
+          </div>
+        </div>
+      </div>
+      <div class="m-account-card" style="box-shadow:none">
+        <div style="font-weight:700;margin-bottom:12px">在线交互测试</div>
+        <select style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;margin-bottom:10px">
+          <option>gemini-3.8-flash-high (带思考过程)</option>
+          <option>gemini-3.7-flash</option>
+        </select>
+        <button style="width:100%;padding:10px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer">
+          ✦ 发送实时测试
+        </button>
+        <div style="margin-top:10px;padding:10px;background:#f8fafc;border-radius:8px;font-size:11.5px;color:#334155;border:1px solid #e2e8f0">
+          <span style="color:#059669;font-weight:600">● 响应成功 (2249ms) · 账号 sxltxaj 承接</span><br>
+          <span style="color:#64748b">Thinking: [Assessing Test Response Validity...]</span><br>
+          内容: "测试成功！连接正常，随时为您服务。"
+        </div>
+      </div>
+    </div>
+  </div></div></div></figure>
+
+  <!-- 反着来 · 操作屏 -->
+  <figure class="cell"><div class="frame"><div class="stage"><div class="screen s-mono">
+    <div class="t-bar">
+      <div><strong>COMMAND_PANEL</strong> :: INTERACTIVE_TEST & ENDPOINT_SETUP</div>
+      <div>TOKEN_AUTH: OK :: CORS: *</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="t-block">
+        <div style="font-size:12px;font-weight:700;margin-bottom:10px">CONNECTION PARAMETERS:</div>
+        <pre style="margin:0;font-size:12px;color:#3f3f46;line-height:1.6">
+ENDPOINT  = "http://127.0.0.1:51200/v1"
+API_KEY   = "tuxevil"
+MODEL     = "gemini-3.8-flash-high"
+CHAT_PATH = "/v1/chat/completions"
+        </pre>
+        <div style="margin-top:12px;font-size:11.5px;color:#71717a">
+          ROTATION_STRATEGY: switch every 5 reqs OR on quota drop
+        </div>
+      </div>
+      <div class="t-block">
+        <div style="font-size:12px;font-weight:700;margin-bottom:10px">EXECUTE PROBE:</div>
+        <div style="background:#18181b;color:#4ade80;padding:12px;border-radius:2px;font-size:11.5px;line-height:1.5">
+          $ curl http://localhost:51200/v1/chat/completions \<br>
+          &nbsp;&nbsp;-d '{"model":"gemini-3.8-flash-high"}'<br>
+          <span style="color:#e4e4e7">> HTTP/1.1 200 OK (2250ms)</span><br>
+          <span style="color:#38bdf8">> ROUTED_ACCOUNT: sxltxaj</span>
+        </div>
+      </div>
+    </div>
+  </div></div></div></figure>
+
+  <!-- 行 4：空状态 / 极值告警屏 -->
+  <div class="rowlab">极限屏<br><span style="font-weight:normal;color:#94a3b8">配额耗尽/冷却</span></div>
+
+  <!-- 贴着做 · 空状态 -->
+  <figure class="cell"><div class="frame"><div class="stage"><div class="screen s-clean" style="justify-content:center;align-items:center;text-align:center">
+    <div style="max-width:440px">
+      <div style="width:48px;height:48px;border-radius:50%;background:#f5f5f4;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:20px;color:#78716c">⏳</div>
+      <div style="font-size:18px;font-weight:600;margin-bottom:8px">账号配额暂时耗尽</div>
+      <div style="font-size:13px;color:#78716c;line-height:1.7;margin-bottom:20px">
+        两个接入的 Google 账号均已达到当前 5 小时速率限制。<br>
+        轮换器已自动开启保护性冷却暂停，防止触发账号封禁风控。
+      </div>
+      <div style="background:#ffffff;border:1px solid #e7e5e4;border-radius:6px;padding:12px;font-size:13px;color:#1c1917">
+        最近重置倒计时：<strong style="font-family:'JetBrains Mono'">03分 42秒</strong>
+      </div>
+    </div>
+  </div></div></div></figure>
+
+  <!-- 取其神 · 空状态 -->
+  <figure class="cell"><div class="frame"><div class="stage"><div class="screen s-card" style="justify-content:center;align-items:center;text-align:center">
+    <div class="m-account-card" style="max-width:480px;border-color:#fde68a;background:#fffdfa">
+      <div style="width:52px;height:52px;border-radius:50%;background:#fef3c7;color:#d97706;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:24px">⚠️</div>
+      <div style="font-size:18px;font-weight:700;color:#92400e;margin-bottom:6px">配额防护冷却中 (429 Rate-Limit)</div>
+      <div style="font-size:13px;color:#78716c;line-height:1.6;margin-bottom:18px">
+        所有绑定的 Gemini 账号配额均已降至 0%。为防止高频盲目重试触发 WAF 封锁，服务已将请求暂停。
+      </div>
+      <div style="background:#ffffff;border:1px solid #fde68a;border-radius:12px;padding:14px;display:flex;justify-content:space-around;font-size:13px">
+        <div><strong>sxltxaj:</strong> <span style="color:#d97706">重置中 (剩余 3分)</span></div>
+        <div style="color:#cbd5e1">|</div>
+        <div><strong>liulian0203:</strong> <span style="color:#d97706">重置中 (剩余 198分)</span></div>
+      </div>
+      <button style="margin-top:16px;padding:8px 20px;border-radius:999px;border:1px solid #d97706;background:#fff;color:#92400e;font-size:12px;font-weight:600;cursor:pointer">
+        手动触发配额立即重测
+      </button>
+    </div>
+  </div></div></div></figure>
+
+  <!-- 反着来 · 空状态 -->
+  <figure class="cell"><div class="frame"><div class="stage"><div class="screen s-mono" style="justify-content:center;align-items:center">
+    <div class="t-block" style="max-width:540px;border-color:#fca5a5;background:#fffaf0">
+      <div style="color:#b91c1c;font-weight:700;font-size:13px;margin-bottom:8px">
+        [ALERT] HTTP_429_RATE_LIMIT_EXHAUSTED
+      </div>
+      <div style="font-size:12px;color:#52525b;line-height:1.6">
+        STATUS: ALL_AVAILABLE_ACCOUNTS_PAUSED<br>
+        SAFETY_CIRCUIT_BREAKER: ACTIVE (PROTECT_AGAINST_TOS_BANS)<br>
+        RECOMMENDATION: WAIT_FOR_COOLDOWN_EXPIRATION
+      </div>
+      <div style="margin-top:14px;background:#ffffff;border:1px solid #d4d4d8;padding:10px;font-size:11.5px">
+        POOL[sxltxaj@gmail.com]&nbsp;&nbsp;&nbsp;&nbsp;:: EXHAUSTED :: RESETS_IN 212s<br>
+        POOL[liulian0203@gmail.com] :: EXHAUSTED :: RESETS_IN 11840s
+      </div>
+    </div>
+  </div></div></div></figure>
+</div>
+
+<!-- 底部确认区：完全遵从 Liebin 规范的确认表单 -->
+<div class="confirm">
+  <h2>三变体方案确认</h2>
+  <p class="hint">每问三条，对不上的写在「其他」。请直接选择并复制答案发回对话。</p>
+
+  <div class="q">
+    <p class="ttl" id="pick-ttl">1 · 选哪个？</p>
+    <select id="pick" aria-labelledby="pick-ttl">
+      <option value="">— 请选择 —</option>
+      <option>贴着做（极简工作台 · 通透克制）</option>
+      <option>取其神（现代流光卡片 · Gemini 渐变与精致卡片）</option>
+      <option>反着来（紧凑工程终端 · 高密度等宽数据网格）</option>
+      <option>三个都不要</option>
+    </select>
+  </div>
+
+  <div class="q">
+    <p class="ttl" id="reject-ttl">2 · 另外两个，哪里不要？</p>
+    <p class="why">可多选。具体的一句意见写在「其他」，并指明是哪一版。</p>
+    <div class="opts" role="group" aria-labelledby="reject-ttl">
+      <label><input type="checkbox" name="reject" value="太满太挤，或装饰抢戏"><span>太满太挤，或装饰抢戏</span></label>
+      <label><input type="checkbox" name="reject" value="太空太素，一屏里没什么可抓的"><span>太空太素，一屏里没什么可抓的</span></label>
+      <label><input type="checkbox" name="reject" value="气质不对（太嫩 / 太商务 / 太工程化）"><span>气质不对（太嫩 / 太商务 / 太工程化）</span></label>
+      <label><input type="checkbox" name="reject" data-other value="其他"><span>其他</span></label>
+    </div>
+    <input class="other" id="reject-other" type="text" autocomplete="off" placeholder="例：「反着来」字号太小像运维软件，我只需要简单看配额">
+  </div>
+
+  <div class="q">
+    <p class="ttl" id="context-ttl">3 · 你的用户，在什么状态下打开这个产品？</p>
+    <p class="why">可多选。更具体的现场写在「其他」。</p>
+    <div class="opts" role="group" aria-labelledby="context-ttl">
+      <label><input type="checkbox" name="context" value="电脑前写代码，挂在副屏瞄一眼配额"><span>电脑前写代码，挂在副屏瞄一眼配额</span></label>
+      <label><input type="checkbox" name="context" value="赶时间排查为什么报错/卡住，扫一眼就得懂"><span>赶时间排查为什么报错/卡住，扫一眼就得懂</span></label>
+      <label><input type="checkbox" name="context" value="单纯需要复制配置参数给新客户端"><span>单纯需要复制配置参数给新客户端</span></label>
+      <label><input type="checkbox" name="context" data-other value="其他"><span>其他</span></label>
+    </div>
+    <input class="other" id="context-other" type="text" autocomplete="off" placeholder="例：长时间在后台跑脚本，只在报错时切出来看是不是 429 耗尽了">
+  </div>
+
+  <button class="copy" id="copyBtn">复制我的选择</button><span class="copied" id="tip"></span>
+</div>
+
+<script>
+(function(){
+  var stages = [].slice.call(document.querySelectorAll('.stage'));
+  function fit(){
+    stages.forEach(function(st){
+      var w = st.parentElement.clientWidth;
+      st.style.transform = 'scale(' + (w / st.offsetWidth) + ')';
+    });
+  }
+  window.addEventListener('resize', fit); fit();
+
+  function wireOther(name){
+    var box=document.querySelector('input[name="'+name+'"][data-other]');
+    var inp=document.getElementById(name+'-other');
+    if(!box||!inp) return;
+    box.addEventListener('change',function(){ if(box.checked) inp.focus(); });
+    inp.addEventListener('input',function(){ if(inp.value.trim()) box.checked=true; });
+  }
+  wireOther('reject'); wireOther('context');
+
+  document.getElementById('copyBtn').addEventListener('click', function(){
+    function gather(name){
+      var parts=[], extra=(document.getElementById(name+'-other').value||'').trim();
+      [].slice.call(document.querySelectorAll('input[name="'+name+'"]:checked')).forEach(function(el){
+        if(!el.hasAttribute('data-other')) parts.push(el.value);
+      });
+      if(extra) parts.push(extra);
+      return parts.join('；')||'（空）';
+    }
+    var txt = '【设计方向确认】\n'
+      + '1 选择：' + (document.getElementById('pick').value || '（未选）') + '\n'
+      + '2 否决理由（原话）：' + gather('reject') + '\n'
+      + '3 使用场景：' + gather('context');
+    navigator.clipboard.writeText(txt).then(function(){
+      document.getElementById('tip').textContent = '✅ 已复制！请直接粘贴发给我';
+    }, function(){
+      document.getElementById('tip').textContent = '复制失败，请手动选中下方文本';
+      var pre = document.createElement('pre'); pre.textContent = txt;
+      document.getElementById('copyBtn').parentElement.appendChild(pre);
+    });
+  });
+})();
+</script>
+</body>
+</html>

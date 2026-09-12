@@ -1,0 +1,63 @@
+{
+  "name": "tuxevil-rotator",
+  "version": "3.7.0",
+  "description": "Multi-provider, multi-account AI proxy rotator with per-model routing, real-time quota tracking, and infringement detection (Google Antigravity, Ollama Cloud)",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "tuxevil-rotator": "bin/tuxevil-rotator.js",
+    "pi-antigravity-rotator": "bin/pi-antigravity-rotator.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "tsx src/cli.ts start",
+    "login": "tsx src/cli.ts login",
+    "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc --project tsconfig.test.json",
+    "test": "ANTIGRAVITY_CLIENT_ID=test-client-id ANTIGRAVITY_CLIENT_SECRET=test-client-secret TUXEVIL_ROTATOR_DIR=/tmp/tuxevil-rotator-test node --import tsx/esm --test \"test/**/*.test.ts\"",
+    "lint": "eslint src test",
+    "coverage": "c8 --reporter=text --reporter=html --check-coverage --lines=60 --branches=50 --functions=60 --statements=60 npm test",
+    "check": "npm run typecheck && npm run typecheck:test && npm test && npm run lint"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "tools/telemetry-receiver/",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE",
+    "tuxevil-rotator_logo.png"
+  ],
+  "keywords": [
+    "ai",
+    "proxy",
+    "rotation",
+    "multiprovider",
+    "antigravity",
+    "ollama",
+    "gemini",
+    "quota",
+    "load-balancing"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tuxevil/tuxevil-rotator.git"
+  },
+  "author": "Sebastián Real (tuxevil)",
+  "dependencies": {
+    "pg": "^8.22.0",
+    "tsx": "^4.22.4",
+    "undici": "^7.29.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.0",
+    "@types/pg": "^8.20.0",
+    "c8": "^11.0.0",
+    "eslint": "^10.6.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.62.1"
+  }
+}
