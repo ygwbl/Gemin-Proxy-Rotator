@@ -2421,22 +2421,27 @@
       if (!data || !data.accounts) return;
       const accounts = data.accounts;
 
-      // 判断哪个账号是“当前正在使用”
-      let activeAcc = null;
-      let activeGemPct = -1;
+      // 判断哪个账号是"当前正在使用"
+      // 策略1: 优先使用后端 activeForModels 字段（路由层真实状态）
+      let activeAcc = accounts.find(a => a.activeForModels && a.activeForModels.length > 0) || null;
+      let activeGemPct = 0;
 
-      let maxQuota = -1;
-      accounts.forEach(a => {
-        const gem = (a.quota || []).find(q => q.modelKey === 'gemini');
-        const pct = gem ? gem.percentRemaining : 0;
-        if (pct > maxQuota) {
-          maxQuota = pct;
-          activeAcc = a;
-          activeGemPct = pct;
-        }
-      });
+      if (!activeAcc) {
+        // 策略2: 无 activeForModels 时，综合评分（Gemini×2 + Claude×1），避免 0% 平局选错号
+        let bestScore = -Infinity;
+        accounts.forEach(a => {
+          const gem = (a.quota || []).find(q => q.modelKey === 'gemini');
+          const cla = (a.quota || []).find(q => q.modelKey === 'claude');
+          const gPct = gem ? (gem.percentRemaining ?? 0) : 0;
+          const cPct = cla ? (cla.percentRemaining ?? 0) : 0;
+          const score = gPct * 2 + cPct * 1;
+          if (score > bestScore) { bestScore = score; activeAcc = a; }
+        });
+      }
 
       if (activeAcc) {
+        const gem = (activeAcc.quota || []).find(q => q.modelKey === 'gemini');
+        activeGemPct = gem ? (gem.percentRemaining ?? 0) : 0;
         document.getElementById('primaryHero').innerText = '👑 ' + activeAcc.email;
         document.getElementById('primaryTag').innerText = '【正在使用中 · 5h 余量 ' + activeGemPct + '%】';
       }
