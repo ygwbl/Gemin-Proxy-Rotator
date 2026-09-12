@@ -1678,15 +1678,15 @@
     <div class="token-analytics-bar">
       <div class="ta-card">
         <div class="ta-title">⚡ 今日生成 Token 吞吐</div>
-        <div class="ta-value" id="todayTokenSum">284,520</div>
+        <div class="ta-value" id="todayTokenSum">0</div>
       </div>
       <div class="ta-card">
         <div class="ta-title">💰 商业 API 等效节省</div>
-        <div class="ta-value green" id="todaySavingsSum">$4.27 USD</div>
+        <div class="ta-value green" id="todaySavingsSum">$0.00 USD</div>
       </div>
       <div class="ta-card">
         <div class="ta-title">🎯 请求分发成功率</div>
-        <div class="ta-value blue" id="todaySuccessRate">100.0%</div>
+        <div class="ta-value blue" id="todaySuccessRate">—</div>
       </div>
       <div class="ta-card">
         <div class="ta-title">🛡️ 每日安全防封上限</div>
@@ -2961,6 +2961,7 @@
     // ─── Feature 3: 加载真实 Token 吞吐数据 ───
     async function fetchTokenAnalytics() {
       try {
+        // 1. Token 吞吐 & 节省金额
         const res = await fetch('/api/token-usage', {
           headers: { 'Authorization': 'Bearer ' + token }
         });
@@ -2970,14 +2971,37 @@
           (data.minutes || []).forEach(m => {
             totalTokens += (m.inputTokens || 0) + (m.outputTokens || 0);
           });
-          // 如果是今天新启动，基准保底
-          const displayTokens = Math.max(totalTokens, 284520);
-          const savings = (displayTokens * 0.000015).toFixed(2);
-
-          const sumEl = document.getElementById('todayTokenSum');
+          // 真实数据，不再兜底假数字
+          const savings = (totalTokens * 0.000015).toFixed(2);
+          const sumEl  = document.getElementById('todayTokenSum');
           const saveEl = document.getElementById('todaySavingsSum');
-          if (sumEl) sumEl.innerText = displayTokens.toLocaleString();
+          if (sumEl)  sumEl.innerText  = totalTokens > 0 ? totalTokens.toLocaleString() : '0';
           if (saveEl) saveEl.innerText = '$' + savings + ' USD';
+        }
+      } catch (e) {}
+
+      try {
+        // 2. 请求分发成功率：从 /api/status 的账号请求数计算
+        const sres = await fetch('/api/status?token=' + encodeURIComponent(token), {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (sres.ok) {
+          const sdata = await sres.json();
+          const accounts = sdata.accounts || [];
+          let totalReq = 0, totalFail = 0;
+          accounts.forEach(a => {
+            totalReq  += (a.requestsToday || 0);
+            totalFail += (a.errorsToday  || 0);
+          });
+          const rateEl = document.getElementById('todaySuccessRate');
+          if (rateEl) {
+            if (totalReq === 0) {
+              rateEl.innerText = '—';
+            } else {
+              const rate = (((totalReq - totalFail) / totalReq) * 100).toFixed(1);
+              rateEl.innerText = rate + '%';
+            }
+          }
         }
       } catch (e) {}
     }

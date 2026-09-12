@@ -169,19 +169,37 @@ function applyAutoModelAffinity(rotator: AccountRotator, model?: string): void {
     const modelState = (rotator as any).modelState;
 
     for (const poolKey of targets) {
+      const otherKey = poolKey === "claude" ? "gemini" : "claude";
       let bestIdx = -1;
-      let maxQuota = -1;
+      let bestScore = -Infinity;
 
       for (let i = 0; i < accounts.length; i++) {
         const acc = accounts[i];
         if (acc.disabled || acc.flagged) continue;
-        if (acc.cooldownsByModel && acc.cooldownsByModel[poolKey] && acc.cooldownsByModel[poolKey] > now) {
-          continue;
-        }
+
+        const inCooldown =
+          acc.cooldownsByModel &&
+          acc.cooldownsByModel[poolKey] &&
+          acc.cooldownsByModel[poolKey] > now;
+
         const qItem = (acc.quota || []).find((q: any) => q.modelKey === poolKey);
-        const quotaPct = qItem ? qItem.percentRemaining : 0;
-        if (quotaPct > maxQuota) {
-          maxQuota = quotaPct;
+        const quotaPct = qItem ? (qItem.percentRemaining ?? 0) : 0;
+
+        const qOther = (acc.quota || []).find((q: any) => q.modelKey === otherKey);
+        const otherPct = qOther ? (qOther.percentRemaining ?? 0) : 0;
+
+        let score: number;
+        if (inCooldown) {
+          // 冷却中：负分，剩余冷却越短得分越高；同时加入另一个模型配额作为补充分
+          const cooldownLeft = acc.cooldownsByModel[poolKey] - now; // ms
+          score = -1e9 - cooldownLeft / 1000 + otherPct * 100;
+        } else {
+          // 非冷却：目标模型配额权重×2，另一个模型×1，避免 0% 平局选错号
+          score = quotaPct * 2 + otherPct * 1;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
           bestIdx = i;
         }
       }
@@ -197,7 +215,7 @@ function applyAutoModelAffinity(rotator: AccountRotator, model?: string): void {
           modelState.set(poolKey, {
             activeAccountIndex: bestIdx,
             stickyAccountIndex: bestIdx,
-            quotaAtRotationStart: maxQuota,
+            quotaAtRotationStart: bestScore,
             requestsOnActiveAccount: 0,
           });
         } else {
@@ -209,6 +227,7 @@ function applyAutoModelAffinity(rotator: AccountRotator, model?: string): void {
     // ignore
   }
 }
+
 
 import { startVersionChecker, performSelfUpdate } from "./version-check.js";
 import { startNotificationPoller } from "./notification-poller.js";
