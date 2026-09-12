@@ -2390,6 +2390,22 @@ export function startProxy(
         for (const [modelKey, mState] of (rotator as any).modelState.entries()) {
           if (!targetModelKey || modelKey.includes(targetModelKey) || targetModelKey.includes(modelKey)) {
             mState.activeAccountIndex = accIdx;
+            mState.stickyAccountIndex = accIdx;
+          }
+        }
+        // 显式锁定核心模型池
+        const targetKeys = targetModelKey ? [targetModelKey] : ["gemini", "claude"];
+        for (const tk of targetKeys) {
+          const cur = (rotator as any).modelState.get(tk);
+          if (cur) {
+            cur.activeAccountIndex = accIdx;
+            cur.stickyAccountIndex = accIdx;
+          } else {
+            (rotator as any).modelState.set(tk, {
+              activeAccountIndex: accIdx,
+              stickyAccountIndex: accIdx,
+              requestsOnActiveAccount: 0,
+            });
           }
         }
         (rotator as any).log(
