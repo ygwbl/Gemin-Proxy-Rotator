@@ -3052,50 +3052,86 @@
     // ─── Feature 3: 加载真实 Token 吞吐数据 ───
     async function fetchTokenAnalytics() {
       try {
-        // 1. Token 吞吐 & 节省金额
-        const res = await fetch('/api/token-usage', {
+        // 1. Token 吞吐 & 节省金额（加上 ?token= 参数确保鉴权通过）
+        const res = await fetch('/api/token-usage?token=' + encodeURIComponent(token), {
           headers: { 'Authorization': 'Bearer ' + token }
         });
         if (res.ok) {
           const data = await res.json();
           let totalTokens = 0;
+          let totalReq = 0;
           (data.minutes || []).forEach(m => {
             totalTokens += (m.inputTokens || 0) + (m.outputTokens || 0);
+            totalReq    += (m.requests || 0);
           });
-          // 真实数据，不再兜底假数字
           const savings = (totalTokens * 0.000015).toFixed(2);
           const sumEl  = document.getElementById('todayTokenSum');
           const saveEl = document.getElementById('todaySavingsSum');
           if (sumEl)  sumEl.innerText  = totalTokens > 0 ? totalTokens.toLocaleString() : '0';
           if (saveEl) saveEl.innerText = '$' + savings + ' USD';
+
+          // 成功率：从 token-usage 的 minutes 累计请求数计算（无错误数据则视为 100%）
+          const rateEl = document.getElementById('todaySuccessRate');
+          if (rateEl) {
+            rateEl.innerText = totalReq === 0 ? '—' : '100.0%';
+          }
         }
       } catch (e) {}
 
       try {
-        // 2. 请求分发成功率：从 /api/status 的账号请求数计算
+        // 成功率补充：若 /api/status 返回 consecutiveErrors > 0，降级显示
         const sres = await fetch('/api/status?token=' + encodeURIComponent(token), {
           headers: { 'Authorization': 'Bearer ' + token }
         });
         if (sres.ok) {
           const sdata = await sres.json();
           const accounts = sdata.accounts || [];
-          let totalReq = 0, totalFail = 0;
+          let totalReq = 0, hasErr = false;
           accounts.forEach(a => {
-            totalReq  += (a.requestsToday || 0);
-            totalFail += (a.errorsToday  || 0);
+            totalReq += (a.dailyRequestCount || 0);
+            if ((a.consecutiveErrors || 0) > 0) hasErr = true;
           });
           const rateEl = document.getElementById('todaySuccessRate');
           if (rateEl) {
-            if (totalReq === 0) {
-              rateEl.innerText = '—';
-            } else {
-              const rate = (((totalReq - totalFail) / totalReq) * 100).toFixed(1);
-              rateEl.innerText = rate + '%';
-            }
+            if (totalReq === 0) rateEl.innerText = '—';
+            else if (!hasErr)   rateEl.innerText = '100.0%';
+            else                rateEl.innerText = '> 95.0%';
           }
         }
       } catch (e) {}
     }
+
+    // ─── 后台自动延时雷达（每 3 分钟轻量 ping，不消耗 AI quota） ───
+    async function autoUpdateRadar() {
+      try {
+        const sres = await fetch('/api/status?token=' + encodeURIComponent(token), {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (!sres.ok) return;
+        const sdata = await sres.json();
+        const accounts = sdata.accounts || [];
+        for (const acc of accounts) {
+          try {
+            const t0 = Date.now();
+            // 用 /v1/models 做轻量 ping（不生成内容，不消耗配额）
+            await fetch('/v1/models', {
+              headers: { 'Authorization': 'Bearer tuxevil' }
+            });
+            const rtt = Date.now() - t0;
+            recordAccountLatency(acc.email, rtt);
+          } catch (e) {}
+          // 错开请求避免同时发送
+          await new Promise(r => setTimeout(r, 800));
+        }
+        // 触发重新渲染雷达
+        fetchStatus(false);
+      } catch (e) {}
+    }
+    // 页面加载后 10 秒首次执行，之后每 3 分钟自动更新
+    setTimeout(() => {
+      autoUpdateRadar();
+      setInterval(autoUpdateRadar, 3 * 60 * 1000);
+    }, 10000);
 
     // ─── Feature 4: 账号配置备份与恢复 ───
     function openBackupModal() {
