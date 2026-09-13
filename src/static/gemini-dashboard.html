@@ -3456,14 +3456,24 @@
     }
 
 
-    // 初始化加载
+    // 初始化加载与极致实时同步机制
     initThresholdUI();
     fetchStatus(false);
     fetchTokenAnalytics();
+
+    // 默认每 8 秒自动向 Google 官方实时探测一次最新配额
     setInterval(() => {
       fetchStatus(false);
       fetchTokenAnalytics();
-    }, 15000);
+    }, 8000);
+
+    // 当用户切回网页标签页时，立即穿透 Google 进行一次极速同步探测
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        fetchStatus(false);
+        fetchTokenAnalytics();
+      }
+    });
   </script>
 </body>
 </html>
