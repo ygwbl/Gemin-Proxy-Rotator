@@ -1964,6 +1964,113 @@
   </div>
 
   <!-- 备份与快速恢复模态弹窗 (标准全屏居中蒙层) -->
+    <!-- ?? ��������ȫ�豸�������� -->
+  <div class="modal-overlay" id="lanModal">
+    <div class="modal-card" style="max-width:650px;">
+      <div class="modal-header">
+        <div class="modal-title">?? ����������豸���� (�ֻ� / iPad / �ʼǱ�)</div>
+        <button class="modal-close" onclick="closeLanModal()">?</button>
+      </div>
+      <div style="font-size:12.5px;color:#475569;margin-bottom:12px;line-height:1.5;">
+        ת�ӷ�������ȫ�������� (<code>0.0.0.0:51200</code>)��ͬһ����������ͥ WiFi / ��˾���� / Tailscale���µ������豸����ֱ�����뱾�����أ�
+      </div>
+
+      <div style="background:#eff6ff;border:1.5px solid #3b82f6;border-radius:8px;padding:12px;margin-bottom:12px;">
+        <div style="font-weight:900;color:#1e40af;font-size:13px;margin-bottom:6px;">?? ��ǰ�������� IP ��ַ��</div>
+        <div id="lanIpList" style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#1e3a8a;font-weight:800;">����̽������� IP...</div>
+      </div>
+
+      <div style="font-size:12.5px;font-weight:900;color:#0f172a;margin-bottom:6px;">?? �����豸���ʼǱ� / �ֻ� / iPad�����ò�����</div>
+      <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.8;">
+        <div><strong>OpenAI Base URL:</strong> <code id="lanOpenAiUrl" style="color:#2563eb;">http://192.168.x.x:51200/v1</code></div>
+        <div><strong>Claude Code CLI:</strong> <code id="lanClaudeCmd" style="color:#7c3aed;">export ANTHROPIC_BASE_URL=http://192.168.x.x:51200</code></div>
+        <div><strong>����ʽ����˵�:</strong> <code id="lanTransUrl" style="color:#16a34a;">http://192.168.x.x:51200/v1/chat/completions</code></div>
+      </div>
+
+      <div style="background:#fffbeb;border:1.5px solid #f59e0b;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:11.5px;line-height:1.6;color:#92400e;">
+        <strong>??? Windows ����ǽ���У�</strong>��������豸�����ϣ����ڱ��� PowerShell������Ա�����У�<br>
+        <code style="background:#fef3c7;padding:2px 4px;border-radius:4px;display:inline-block;margin-top:4px;">New-NetFirewallRule -DisplayName "Antigravity 51200" -Direction Inbound -LocalPort 51200 -Protocol TCP -Action Allow</code>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button class="brutal-btn btn-blue" onclick="copyLanConfig()">?? ���ƾ�������ַ</button>
+        <button class="brutal-btn btn-dark" onclick="closeLanModal()">�ر�</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ?? ΢�� Pushplus �澯��������Ե��� -->
+  <div class="modal-overlay" id="pushplusModal">
+    <div class="modal-card" style="max-width:580px;">
+      <div class="modal-header">
+        <div class="modal-title">?? ΢�� Pushplus ʵʱ��ظ澯</div>
+        <button class="modal-close" onclick="closePushplusModal()">?</button>
+      </div>
+      <div style="font-size:12.5px;color:#475569;margin-bottom:12px;line-height:1.5;">
+        ���˺����漱��ϵͳ�Զ�����ʱ����Ϣ��ͨ��΢�Ź��ںź��뼶���͵������ֻ���
+      </div>
+
+      <div style="background:#f0fdf4;border:1.5px solid #16a34a;border-radius:8px;padding:12px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-weight:900;color:#166534;font-size:13px;">? ΢�����ͷ�������������</span>
+          <span style="background:#22c55e;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:800;">7x24h �ػ���</span>
+        </div>
+        <div style="font-size:11.5px;color:#15803d;font-family:'JetBrains Mono',monospace;">
+          Token: 6978c77025ff4b07935c486634ad3b30
+        </div>
+      </div>
+
+      <div style="font-size:12.5px;font-weight:900;color:#0f172a;margin-bottom:6px;">??? ʵʱ��Ч�������ع���</div>
+      <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:11.5px;line-height:1.7;">
+        <div>? <b>�Ͷ�ȸ澯��</b>5h ˮλ�� 7d �������� 10% ʱ��������Ԥ��</div>
+        <div>?? <b>�����к����ѣ�</b>�����˺������ľ���ϵͳƽ���л��ӹܺ�ʱ����֪ͨ</div>
+        <div>??? <b>�����۶ϱ�����</b>�˺������ٷ� 429 ����� 6 Сʱ������ȴʱ���̱���</div>
+        <div style="color:#64748b;font-size:10.5px;margin-top:4px;">* ���� 30 ����ͬ�˺�ͬ��澯�������ž�Ƶ������ˢ������</div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <button class="brutal-btn btn-green" id="btnTestPush" onclick="sendTestPushplus()">
+          ?? ����΢�Ų�������
+        </button>
+        <button class="brutal-btn btn-dark" onclick="closePushplusModal()">�ر�</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ?? �˺Ŷ������������ڵ�󶨵��� -->
+  <div class="modal-overlay" id="proxyBindModal">
+    <div class="modal-card" style="max-width:540px;">
+      <div class="modal-header">
+        <div class="modal-title">?? ���˺�ר��������������</div>
+        <button class="modal-close" onclick="closeProxyBindModal()">?</button>
+      </div>
+      <div style="font-size:12.5px;color:#475569;margin-bottom:12px;line-height:1.5;">
+        Ϊ�� Google �˺�ָ�������ĳ����ڵ㡣ʵ�������� <strong>��һ��һ�ڵ�һ����ָ�ơ�</strong>�������ж� IP ������
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label style="font-size:12px;font-weight:900;color:#0f172a;display:block;margin-bottom:4px;">Ŀ���˺ţ�</label>
+        <input type="text" id="proxyBindEmail" readonly class="input-brutal" style="background:#f1f5f9;cursor:not-allowed;" />
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px;font-weight:900;color:#0f172a;display:block;margin-bottom:4px;">ר�������ڵ� URL��</label>
+        <input type="text" id="proxyBindUrl" placeholder="����: socks5://127.0.0.1:7890 �� http://127.0.0.1:10808" class="input-brutal" style="font-family:'JetBrains Mono',monospace;font-size:12px;" />
+        <div style="font-size:11px;color:#64748b;margin-top:3px;">
+          ֧�� <code>socks5://</code>��<code>http://</code>��<code>https://</code>�����ձ��漴�ָ�����ֱ����
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <button class="brutal-btn btn-red-outline" onclick="clearProxyBind()">��� (�ָ�ֱ��)</button>
+        <div style="display:flex;gap:8px;">
+          <button class="brutal-btn btn-dark" onclick="closeProxyBindModal()">ȡ��</button>
+          <button class="brutal-btn btn-green" onclick="saveProxyBind()">?? ���������</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="backupModal" onclick="if(event.target === this) closeBackupModal()">
     <div class="modal-card">
       <div class="modal-header">
@@ -2055,6 +2162,106 @@
     function closeAddModal() {
       document.getElementById('addAccountModal').style.display = 'none';
       fetchStatus(true);
+    }
+
+        // ������ ?? ����������豸���� ������
+    let currentLanIp = '127.0.0.1';
+    async function openLanModal() {
+      document.getElementById('lanModal').style.display = 'flex';
+      try {
+        const res = await fetch('/api/system/network-info', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.ok && data.lanIps && data.lanIps.length > 0) {
+          currentLanIp = data.lanIps.find(ip => ip.startsWith('192.168.') || ip.startsWith('10.')) || data.lanIps[0];
+          document.getElementById('lanIpList').innerHTML = data.lanIps.map(ip => `<div>?? http://${ip}:${data.port}</div>`).join('');
+          document.getElementById('lanOpenAiUrl').innerText = `http://${currentLanIp}:${data.port}/v1`;
+          document.getElementById('lanClaudeCmd').innerText = `export ANTHROPIC_BASE_URL=http://${currentLanIp}:${data.port}`;
+          document.getElementById('lanTransUrl').innerText = `http://${currentLanIp}:${data.port}/v1/chat/completions`;
+        }
+      } catch (e) {
+        document.getElementById('lanIpList').innerText = '��ȡʧ��: ' + e.message;
+      }
+    }
+    function closeLanModal() {
+      document.getElementById('lanModal').style.display = 'none';
+    }
+    function copyLanConfig() {
+      const text = `OpenAI Base URL: http://${currentLanIp}:51200/v1\nClaude CLI: export ANTHROPIC_BASE_URL=http://${currentLanIp}:51200`;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('?? �Ѹ��ƾ���������', '�Ѹ��ƾ����� Base URL����ֱ��ճ�����ֻ����������ԡ�');
+      });
+    }
+
+    // ������ ?? ΢�� Pushplus �澯 ������
+    function openPushplusModal() {
+      document.getElementById('pushplusModal').style.display = 'flex';
+    }
+    function closePushplusModal() {
+      document.getElementById('pushplusModal').style.display = 'none';
+    }
+    async function sendTestPushplus() {
+      const btn = document.getElementById('btnTestPush');
+      btn.disabled = true;
+      btn.innerText = '? ���Ͳ�����...';
+      try {
+        const res = await fetch('/api/test-pushplus', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('?? ΢�����ͳɹ���', '������Ϣ�ѳɹ�����������΢�ţ���鿴�ֻ���');
+        } else {
+          alert('����ʧ��: ' + (data.msg || data.error));
+        }
+      } catch (e) {
+        alert('����ʧ��: ' + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '?? ����΢�Ų�������';
+      }
+    }
+
+    // ������ ?? �˺Ŷ��������� ������
+    let currentProxyTargetEmail = '';
+    function openProxyBindModal(email, currentProxy) {
+      currentProxyTargetEmail = email;
+      document.getElementById('proxyBindEmail').value = email;
+      document.getElementById('proxyBindUrl').value = currentProxy || '';
+      document.getElementById('proxyBindModal').style.display = 'flex';
+    }
+    function closeProxyBindModal() {
+      document.getElementById('proxyBindModal').style.display = 'none';
+    }
+    function clearProxyBind() {
+      document.getElementById('proxyBindUrl').value = '';
+      saveProxyBind();
+    }
+    async function saveProxyBind() {
+      const email = currentProxyTargetEmail;
+      const proxyUrl = document.getElementById('proxyBindUrl').value.trim();
+      try {
+        const res = await fetch('/api/account/proxy', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({ email, proxyUrl })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('?? �������Ѹ���', `�˺� ${email} �ѳɹ��󶨽ڵ�: ${proxyUrl || '����ֱ��'}`);
+          closeProxyBindModal();
+          fetchStatus(true);
+        } else {
+          alert('����ʧ��: ' + (data.error || 'δ֪����'));
+        }
+      } catch (e) {
+        alert('����ʧ��: ' + e.message);
+      }
     }
 
     function openConfigModal() {

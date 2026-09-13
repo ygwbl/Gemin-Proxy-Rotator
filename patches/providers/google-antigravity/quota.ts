@@ -359,6 +359,20 @@ export async function fetchProviderQuota(
               mainClaude.timerType = "5h";
             }
           }
+
+          // 🔔 触发 Pushplus 微信低配额预警（<= 10%）
+          try {
+            const { notifyQuotaWarning } = await import("../../../notifications/pushplus.js");
+            if (g5h && g5h.percentRemaining <= 10) {
+              void notifyQuotaWarning(account.config.email, "gemini-5h", g5h.percentRemaining, g5h.resetTime);
+            }
+            if (gWeekly && gWeekly.percentRemaining <= 10) {
+              void notifyQuotaWarning(account.config.email, "gemini-weekly", gWeekly.percentRemaining, gWeekly.resetTime);
+            }
+            if (cWeekly && cWeekly.percentRemaining <= 10) {
+              void notifyQuotaWarning(account.config.email, "claude-weekly", cWeekly.percentRemaining, cWeekly.resetTime);
+            }
+          } catch {}
         }
       }
     } catch {}

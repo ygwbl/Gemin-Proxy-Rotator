@@ -2485,6 +2485,112 @@ export function startProxy(
       return;
     }
 
+    if (method === "GET" && pathname === "/api/system/network-info") {
+      if (!requireAdmin(req, res)) return;
+      void (async () => {
+        try {
+          const os = await import("node:os");
+          const ifaces = os.networkInterfaces();
+          const lanIps: string[] = [];
+          for (const name of Object.keys(ifaces)) {
+            for (const net of ifaces[name] || []) {
+              if (net.family === "IPv4" && !net.internal) {
+                lanIps.push(net.address);
+              }
+            }
+          }
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, port: 51200, lanIps, hostname: os.hostname() }));
+        } catch (err: any) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: err.message }));
+        }
+      })();
+      return;
+    }
+
+    if (method === "POST" && pathname === "/api/account/proxy") {
+      if (!requireAdmin(req, res)) return;
+      void (async () => {
+        try {
+          let raw = "";
+          for await (const chunk of req) { raw += chunk; }
+          const body = raw ? JSON.parse(raw) : {};
+          const { email, proxyUrl } = body;
+          if (!email) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: false, error: "email is required" }));
+            return;
+          }
+          const account = rotator.accounts.find((a) => a.config.email === email);
+          if (!account) {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: false, error: "Account not found" }));
+            return;
+          }
+          const normalized = (proxyUrl || "").trim();
+          account.config.proxyUrl = normalized || undefined;
+          if (account.config.credentials && account.config.credentials[0]) {
+            account.config.credentials[0].proxyUrl = normalized || undefined;
+          }
+          try {
+            const fs = await import("node:fs");
+            const path = await import("node:path");
+            const home = process.env.USERPROFILE || process.env.HOME || "";
+            const cfgPath = path.join(home, ".tuxevil-rotator", "accounts.json");
+            if (fs.existsSync(cfgPath)) {
+              const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
+              if (cfg && cfg.accounts) {
+                const target = cfg.accounts.find((a: any) => a.email === email);
+                if (target) {
+                  target.proxyUrl = normalized || undefined;
+                  if (target.credentials && target.credentials[0]) {
+                    target.credentials[0].proxyUrl = normalized || undefined;
+                  }
+                  fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), "utf8");
+                }
+              }
+            }
+          } catch {}
+          (rotator as any).log?.(`[PROXY-BIND] 已为账号 ${email} 绑定独立代理节点: ${normalized || "直连"}`);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, email, proxyUrl: normalized }));
+        } catch (err: any) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: err.message }));
+        }
+      })();
+      return;
+    }
+
+    if (method === "POST" && pathname === "/api/test-pushplus") {
+      if (!requireAdmin(req, res)) return;
+      void (async () => {
+        try {
+          const { sendPushplus } = await import("./notifications/pushplus.js");
+          const result = await sendPushplus(
+            "🚀 反重力系统微信测试推送",
+            `<div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;">
+              <h3 style="color:#16a34a;margin-top:0;">✅ 微信 Pushplus 实时通知连通成功！</h3>
+              <p>恭喜！您的反重力多账号智能中继系统已成功连接微信推送服务：</p>
+              <ul>
+                <li>⚡ <b>配额预警</b>：5h 水位或 7d 周配额低于 10% 自动提醒</li>
+                <li>🔄 <b>智能切号</b>：主力账号额度耗尽自动无缝交接通知</li>
+                <li>🛡️ <b>防封熔断</b>：触发官方 429 或 6 小时保护性冷却即刻报警</li>
+              </ul>
+              <p style="font-size:12px;color:#6b7280;margin-bottom:0;">触发时间：${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</p>
+            </div>`
+          );
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (err: any) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: err.message }));
+        }
+      })();
+      return;
+    }
+
     if (method === "POST" && pathname.startsWith("/api/remove-account/")) {
       if (!requireAdmin(req, res)) return;
       const email = decodeURIComponent(

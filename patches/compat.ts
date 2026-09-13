@@ -2581,17 +2581,21 @@ export async function handleOpenAIChatCompletions(
     ? { ...validation.value, messages: compRes.messages }
     : validation.value;
 
-  // 🌟 后台辅助任务静默降级（Smart Downgrade: 保护 Claude / Pro 核心配额）
+  // 🌟 后台辅助任务静默降级（Smart Downgrade: 保护 Claude 3.7 / Pro 核心配额）
   const lastMsg = chatReq.messages?.[chatReq.messages.length - 1]?.content;
   const lastText = typeof lastMsg === "string" ? lastMsg : (Array.isArray(lastMsg) ? JSON.stringify(lastMsg) : "");
-  if (
-    /generate.*(title|summary)|summarize.*conversation|3-5\s*words|conclude a title|总结.*标题|生成.*标题/i.test(lastText) &&
-    (chatReq.model.includes("claude") || chatReq.model.includes("pro") || chatReq.model.includes("opus"))
-  ) {
-    chatReq.model = "gemini-3.8-flash-high";
-    (rotator as any).log?.(
-      `[SMART-DOWNGRADE] 识别到客户端后台标题生成请求，已自动静默降级至 Flash 模型以保护核心配额`,
-    );
+  if (chatReq.model.includes("claude") || chatReq.model.includes("pro") || chatReq.model.includes("opus")) {
+    const isTitle = /generate.*(title|summary)|summarize.*conversation|3-5\s*words|conclude a title|总结.*标题|生成.*标题/i.test(lastText);
+    const isTranslate = /^(请)?(帮我)?(翻译|translate|解释词义|单词释义|what does .* mean)/i.test(lastText.trim());
+    const isFormat = /^(请)?(帮我)?(添加注释|格式化|format (this|json|code))/i.test(lastText.trim());
+    if (isTitle || isTranslate || isFormat) {
+      const taskLabel = isTitle ? "会话标题生成" : (isTranslate ? "词义翻译" : "注释与格式整理");
+      const origModel = chatReq.model;
+      chatReq.model = "gemini-3.8-flash-high";
+      (rotator as any).log?.(
+        `[SMART-DOWNGRADE] 识别到轻量辅助任务【${taskLabel}】，已自动从 ${origModel} 静默降级至 Flash 模型以保护核心配额`,
+      );
+    }
   }
 
   const started = Date.now();
@@ -3012,6 +3016,23 @@ export async function handleAnthropicMessages(
         messages: compRes.messages as typeof validation.value.messages,
       }
     : validation.value;
+
+  // 🌟 后台辅助任务静默降级（Smart Downgrade: 保护 Claude 3.7 / Pro 核心配额）
+  const lastAnthropicMsg = (anthropicReq.messages as any)?.[anthropicReq.messages.length - 1]?.content;
+  const lastAnthropicText = typeof lastAnthropicMsg === "string" ? lastAnthropicMsg : (Array.isArray(lastAnthropicMsg) ? JSON.stringify(lastAnthropicMsg) : "");
+  if (anthropicReq.model.includes("claude") || anthropicReq.model.includes("pro") || anthropicReq.model.includes("opus")) {
+    const isTitle = /generate.*(title|summary)|summarize.*conversation|3-5\s*words|conclude a title|总结.*标题|生成.*标题/i.test(lastAnthropicText);
+    const isTranslate = /^(请)?(帮我)?(翻译|translate|解释词义|单词释义|what does .* mean)/i.test(lastAnthropicText.trim());
+    const isFormat = /^(请)?(帮我)?(添加注释|格式化|format (this|json|code))/i.test(lastAnthropicText.trim());
+    if (isTitle || isTranslate || isFormat) {
+      const taskLabel = isTitle ? "会话标题生成" : (isTranslate ? "词义翻译" : "注释与格式整理");
+      const origModel = anthropicReq.model;
+      anthropicReq.model = "gemini-3.8-flash-high";
+      (rotator as any).log?.(
+        `[SMART-DOWNGRADE] [Anthropic] 识别到轻量辅助任务【${taskLabel}】，已自动从 ${origModel} 静默降级至 Flash 模型以保护核心配额`,
+      );
+    }
+  }
 
   const started = Date.now();
   const streamMode = validation.value.stream ? "anthropic" : "none";

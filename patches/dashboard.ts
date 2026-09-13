@@ -128,6 +128,7 @@ export async function serveStatusApi(
         acc.officialTier = realAcc.officialTier;
         acc.officialProject = realAcc.officialProject || realAcc.officialTier.project || "aicode-consumers";
       }
+      acc.proxyUrl = realAcc?.config?.proxyUrl || realAcc?.config?.credentials?.[0]?.proxyUrl || "";
       return acc;
     });
   } catch {}
