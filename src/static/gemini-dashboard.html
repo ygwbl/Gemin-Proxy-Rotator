@@ -1679,18 +1679,22 @@
       <div class="ta-card">
         <div class="ta-title">⚡ 今日生成 Token 吞吐</div>
         <div class="ta-value" id="todayTokenSum">0</div>
+        <div class="ta-sub" id="todayTokenSub" style="font-size:11px;color:#64748b;margin-top:2px;">统计中...</div>
       </div>
       <div class="ta-card">
         <div class="ta-title">💰 商业 API 等效节省</div>
         <div class="ta-value green" id="todaySavingsSum">$0.00 USD</div>
+        <div class="ta-sub" id="todaySavingsSub" style="font-size:11px;color:#16a34a;margin-top:2px;">按真实调用折算</div>
       </div>
       <div class="ta-card">
         <div class="ta-title">🎯 请求分发成功率</div>
         <div class="ta-value blue" id="todaySuccessRate">—</div>
+        <div class="ta-sub" id="todaySuccessSub" style="font-size:11px;color:#64748b;margin-top:2px;">链路质量监控</div>
       </div>
       <div class="ta-card">
         <div class="ta-title">🛡️ 每日安全防封上限</div>
-        <div class="ta-value" id="todayGuardDesc">300 次/号 均衡休眠</div>
+        <div class="ta-value cyan" id="todayGuardDesc">0 / 900 次</div>
+        <div class="ta-sub" id="todayGuardSub" style="font-size:11px;color:#64748b;margin-top:2px;">单号 300 次均衡休眠</div>
       </div>
     </div>
 
@@ -3285,53 +3289,124 @@
       }, 4000);
     }
 
-    // ─── Feature 3: 加载真实 Token 吞吐数据 ───
+    // ─── Feature 3: 4大指标看板（100% 真实数据动态计算） ───
     async function fetchTokenAnalytics() {
+      let todayInTokens = 0;
+      let todayOutTokens = 0;
+      let todayTotalTokens = 0;
+      let todayRequests = 0;
+
+      // 1. 获取今日日期（UTC 与 本地双对齐）
+      const now = new Date();
+      const localDatePrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      const utcDatePrefix = now.toISOString().slice(0, 10);
+
       try {
-        // 1. Token 吞吐 & 节省金额（加上 ?token= 参数确保鉴权通过）
         const res = await fetch('/api/token-usage?token=' + encodeURIComponent(token), {
           headers: { 'Authorization': 'Bearer ' + token }
         });
         if (res.ok) {
           const data = await res.json();
-          let totalTokens = 0;
-          let totalReq = 0;
-          (data.minutes || []).forEach(m => {
-            totalTokens += (m.inputTokens || 0) + (m.outputTokens || 0);
-            totalReq    += (m.requests || 0);
-          });
-          const savings = (totalTokens * 0.000015).toFixed(2);
-          const sumEl  = document.getElementById('todayTokenSum');
-          const saveEl = document.getElementById('todaySavingsSum');
-          if (sumEl)  sumEl.innerText  = totalTokens > 0 ? totalTokens.toLocaleString() : '0';
-          if (saveEl) saveEl.innerText = '$' + savings + ' USD';
+          // hours 记录了小时级统计；如果 hours 暂无今日记录，则取 minutes
+          const hoursToday = (data.hours || []).filter(h => h.period && (h.period.startsWith(localDatePrefix) || h.period.startsWith(utcDatePrefix)));
+          if (hoursToday.length > 0) {
+            hoursToday.forEach(h => {
+              todayInTokens  += (h.inputTokens || 0);
+              todayOutTokens += (h.outputTokens || 0);
+              todayRequests  += (h.requests || 0);
+            });
+          } else {
+            // fallback 取 minutes 对应今日记录
+            const minutesToday = (data.minutes || []).filter(m => m.period && (m.period.startsWith(localDatePrefix) || m.period.startsWith(utcDatePrefix)));
+            minutesToday.forEach(m => {
+              todayInTokens  += (m.inputTokens || 0);
+              todayOutTokens += (m.outputTokens || 0);
+              todayRequests  += (m.requests || 0);
+            });
+          }
+          todayTotalTokens = todayInTokens + todayOutTokens;
 
-          // 成功率：从 token-usage 的 minutes 累计请求数计算（无错误数据则视为 100%）
-          const rateEl = document.getElementById('todaySuccessRate');
-          if (rateEl) {
-            rateEl.innerText = totalReq === 0 ? '—' : '100.0%';
+          // 呈现 ①：今日生成 Token 吞吐
+          const sumEl = document.getElementById('todayTokenSum');
+          const sumSub = document.getElementById('todayTokenSub');
+          if (sumEl) {
+            sumEl.innerText = todayTotalTokens > 0 ? todayTotalTokens.toLocaleString() : '0';
+          }
+          if (sumSub) {
+            sumSub.innerText = todayTotalTokens > 0
+              ? `入: ${todayInTokens.toLocaleString()} · 出: ${todayOutTokens.toLocaleString()}`
+              : '今日暂无 Token 消耗';
+          }
+
+          // 呈现 ②：商业 API 等效节省 (按官方主流商业计费标准：$3/M 输入, $15/M 输出)
+          const dollarVal = (todayInTokens * 0.000003) + (todayOutTokens * 0.000015);
+          const saveEl = document.getElementById('todaySavingsSum');
+          const saveSub = document.getElementById('todaySavingsSub');
+          if (saveEl) {
+            if (dollarVal === 0) {
+              saveEl.innerText = '$0.00 USD';
+            } else if (dollarVal < 0.01) {
+              saveEl.innerText = '$' + dollarVal.toFixed(4) + ' USD';
+            } else {
+              saveEl.innerText = '$' + dollarVal.toFixed(2) + ' USD';
+            }
+          }
+          if (saveSub) {
+            if (dollarVal > 0) {
+              saveSub.innerText = `等效约 ￥${(dollarVal * 7.25).toFixed(3)} 元`;
+            } else {
+              saveSub.innerText = '按真实调用标准折算';
+            }
           }
         }
       } catch (e) {}
 
+      // 2. 从 /api/status 读取实时健康度与今日各账号请求量
       try {
-        // 成功率补充：若 /api/status 返回 consecutiveErrors > 0，降级显示
         const sres = await fetch('/api/status?token=' + encodeURIComponent(token), {
           headers: { 'Authorization': 'Bearer ' + token }
         });
         if (sres.ok) {
           const sdata = await sres.json();
           const accounts = sdata.accounts || [];
-          let totalReq = 0, hasErr = false;
+
+          // 呈现 ③：请求分发成功率 (严格依实情统计，杜绝伪造)
+          let totalDailyRequests = 0;
+          let totalErrors = 0;
           accounts.forEach(a => {
-            totalReq += (a.dailyRequestCount || 0);
-            if ((a.consecutiveErrors || 0) > 0) hasErr = true;
+            totalDailyRequests += (a.dailyRequestCount || 0);
+            totalErrors += (a.consecutiveErrors || 0);
           });
+
+          const actualReqCount = Math.max(totalDailyRequests, todayRequests);
           const rateEl = document.getElementById('todaySuccessRate');
+          const rateSub = document.getElementById('todaySuccessSub');
           if (rateEl) {
-            if (totalReq === 0) rateEl.innerText = '—';
-            else if (!hasErr)   rateEl.innerText = '100.0%';
-            else                rateEl.innerText = '> 95.0%';
+            if (actualReqCount === 0) {
+              rateEl.innerText = '—';
+              if (rateSub) rateSub.innerText = '待命中 (暂无请求)';
+            } else {
+              const successCount = Math.max(0, actualReqCount - totalErrors);
+              const ratePct = ((successCount / actualReqCount) * 100).toFixed(1);
+              rateEl.innerText = ratePct + '%';
+              if (rateSub) {
+                rateSub.innerText = totalErrors === 0
+                  ? `全部成功 (${actualReqCount}/${actualReqCount})`
+                  : `出现 ${totalErrors} 次异常重试`;
+              }
+            }
+          }
+
+          // 呈现 ④：每日安全防封上限 (动态展示当前所有号的总预算与消耗进度)
+          const guardEl = document.getElementById('todayGuardDesc');
+          const guardSub = document.getElementById('todayGuardSub');
+          const totalCapacity = (accounts.length || 1) * 300;
+          if (guardEl) {
+            guardEl.innerText = `${actualReqCount} / ${totalCapacity} 次`;
+          }
+          if (guardSub) {
+            const left = Math.max(0, totalCapacity - actualReqCount);
+            guardSub.innerText = `共 ${accounts.length} 账号 · 尚余 ${left} 次软上限`;
           }
         }
       } catch (e) {}
