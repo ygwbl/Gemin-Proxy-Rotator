@@ -2690,17 +2690,76 @@
         if (claudePct <= 10) claudeBarClass = 'warn';
         if (claudePct === 0) claudeBarClass = 'zero';
 
-        // 动态标签：根据实际 timerType 与剩余重置时间，精准识别是 5小时核心水位 还是 7天周配额池
+        // 🌟 计算四大独立配额（Gemini 5小时 + Gemini 7天周配额，Claude 5小时 + Claude 7天周配额）
         const claudeTimerType  = claude ? (claude.timerType || '7d') : '7d';
         const gemTimerType     = gem   ? (gem.timerType   || '5h') : '5h';
         const gemResetMs       = gem && gem.resetTime ? new Date(gem.resetTime).getTime() : 0;
         const gemDurationMs    = gemResetMs > Date.now() ? (gemResetMs - Date.now()) : 0;
         const gemIs7d          = gemTimerType === '7d' || gemDurationMs > 6 * 3600 * 1000;
 
-        const claudePoolLabel  = claudeTimerType === '5h' ? 'Claude / 5小时核心水位' : 'Claude / 7天周配额池';
-        const claudePeriodLabel= claudeTimerType === '5h' ? '5小时核心水位'         : '7天周周期水位';
-        const gemPoolLabel     = gemIs7d ? 'Gemini / 7天周配额池' : 'Gemini / 5小时核心水位';
-        const gemPeriodLabel   = gemIs7d ? '7天周周期配额' : '5小时核心水位';
+        const claudeResetMs    = claude && claude.resetTime ? new Date(claude.resetTime).getTime() : 0;
+        const claudeDurationMs = claudeResetMs > Date.now() ? (claudeResetMs - Date.now()) : 0;
+        const claudeIs7d       = claudeTimerType === '7d' || claudeDurationMs > 6 * 3600 * 1000;
+
+        // Gemini 双配额构建
+        let g5hPct = gemPct, g5hReset = null, g5hZero = (gemPct === 0);
+        let g7dPct = gemPct, g7dReset = null, g7dZero = (gemPct === 0);
+
+        if (gemIs7d) {
+          // 当前触发 7 天周周期限制 (如 112 小时, 余 9%)
+          g7dPct = gemPct;
+          g7dReset = gem.resetTime;
+          g7dZero = (gemPct === 0);
+          g5hPct = gemPct;
+          g5hReset = gem.resetTime;
+          g5hZero = (gemPct === 0);
+        } else if (gemDurationMs > 0) {
+          // 当前处于 5 小时滚动周期冷却/重置 (如 3小时, 余 68%)
+          g5hPct = gemPct;
+          g5hReset = gem.resetTime;
+          g5hZero = (gemPct === 0);
+          g7dPct = 100;
+          g7dReset = null;
+          g7dZero = false;
+        } else {
+          // 100% 满血
+          g5hPct = gemPct;
+          g5hReset = null;
+          g5hZero = false;
+          g7dPct = 100;
+          g7dReset = null;
+          g7dZero = false;
+        }
+
+        // Claude 双配额构建
+        let c5hPct = claudePct, c5hReset = null, c5hZero = (claudePct === 0);
+        let c7dPct = claudePct, c7dReset = null, c7dZero = (claudePct === 0);
+
+        if (claudeIs7d) {
+          // 当前触发 7 天周周期限制 (如 3天17小时, 余 0%)
+          c7dPct = claudePct;
+          c7dReset = claude.resetTime;
+          c7dZero = (claudePct === 0);
+          c5hPct = claudePct;
+          c5hReset = claude.resetTime;
+          c5hZero = (claudePct === 0);
+        } else if (claudeDurationMs > 0) {
+          // 处于 5 小时滚动限制
+          c5hPct = claudePct;
+          c5hReset = claude.resetTime;
+          c5hZero = (claudePct === 0);
+          c7dPct = 100;
+          c7dReset = null;
+          c7dZero = false;
+        } else {
+          // 100% 满血
+          c5hPct = claudePct;
+          c5hReset = null;
+          c5hZero = false;
+          c7dPct = 100;
+          c7dReset = null;
+          c7dZero = false;
+        }
 
         // 🛡️ 每日安全防封预算计算 (标准 300 次软上限)
         const dailyReq = acc.dailyRequestCount || 0;
@@ -2789,60 +2848,102 @@
             </span>
           </div>
 
-          <!-- 第 2 行：Gemini 配额（智能精准区分 5小时核心水位 vs 7天周配额池） -->
-          <div class="quota-box ${gemPct === 0 ? 'is-cooldown' : ''}" style="${gemIs7d ? 'background:#fffdfa;border-color:#f59e0b;' : ''}">
-            <div class="quota-box-header">
+          <!-- 🌟 Gemini 双周期额度展示 (5小时核心水位 + 7天周配额池) -->
+          <div class="quota-family-container" style="background:#f8fafc;border:2px solid #0f172a;border-radius:10px;padding:10px 12px;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
               <div style="display:flex;align-items:center;gap:6px;">
-                <span style="${gemIs7d ? 'color:#b45309;font-weight:900;' : ''}">
-                  ${gemIs7d ? '📅 ' + gemPoolLabel : '🌟 ' + gemPoolLabel}
+                <span style="font-weight:900;color:#0f172a;font-size:13px;">🌟 Gemini 周期额度监控</span>
+                <span style="font-size:10px;background:#dcfce7;color:#166534;border:1px solid #16a34a;padding:1px 5px;border-radius:4px;font-weight:800;">5h核心 + 7d周配额</span>
+              </div>
+              ${gemIs7d ? '<span style="font-size:10.5px;background:#fef3c7;color:#92400e;border:1px solid #d97706;padding:1px 6px;border-radius:4px;font-weight:800;">周周期生效中</span>' : ''}
+            </div>
+
+            <!-- Gemini 5小时核心滚动水位 -->
+            <div class="sub-quota-row" style="margin-bottom:8px;padding:6px 8px;background:#fff;border:1.5px solid #cbd5e1;border-radius:6px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+                <span style="color:#0f172a;font-weight:700;">⚡ Gemini / 5小时核心水位</span>
+                <strong style="color:${g5hPct <= currentThreshold ? '#dc2626' : '#16a34a'};font-family:'JetBrains Mono',monospace;">${g5hPct}%</strong>
+              </div>
+              <div class="quota-track-wrap" style="height:8px;margin-bottom:3px;">
+                <div class="quota-track" style="height:8px;">
+                  <div class="quota-fill ${g5hPct <= currentThreshold ? (g5hPct === 0 ? 'zero' : 'warn') : ''}" style="width:${Math.max(g5hPct, 3)}%;"></div>
+                  <div class="threshold-marker" style="left:${currentThreshold}%"></div>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#64748b;">
+                <span style="color:#b45309;font-weight:700;">▼ ${currentThreshold}% 切号线</span>
+                <span class="live-meta-timer" id="timer_g5h_${safeId}" data-reset="${g5hReset || ''}" data-email="${acc.email}" data-zero="${g5hZero ? '1' : '0'}">
+                  ${g5hReset ? '⏳ 5h重置: <strong class="cd-digital-text">' + formatTime(g5hReset) + '</strong>' : '⌛ 满血无需重置'}
                 </span>
-                ${gemIs7d ? '<span style="font-size:10px;background:#fef3c7;color:#92400e;border:1.5px solid #d97706;padding:1px 6px;border-radius:4px;font-weight:800;">7天周配额</span>' : '<span style="font-size:10px;background:#f0fdf4;color:#166534;border:1px solid #16a34a;padding:1px 6px;border-radius:4px;font-weight:700;">5h核心</span>'}
-                ${gemPct === 0 ? '<span class="cooldown-pill-badge">0% 冷却中</span>' : ''}
-              </div>
-              <strong style="color:${gemPct <= currentThreshold ? '#dc2626' : (gemIs7d ? '#d97706' : '#16a34a')};font-family:'JetBrains Mono',monospace;">${gemPct}%</strong>
-            </div>
-            <div class="quota-track-wrap">
-              <div class="quota-track">
-                <div class="quota-fill ${gemBarClass}" style="width:${Math.max(gemPct, 3)}%;${gemIs7d && gemPct > currentThreshold ? 'background:#f59e0b;' : ''}"></div>
-                <div class="threshold-marker" style="left:${currentThreshold}%"></div>
               </div>
             </div>
-            <div class="quota-meta-row">
-              <span class="threshold-label-text" style="color:${gemIs7d ? '#b45309' : '#b45309'};font-weight:800;">
-                ${gemIs7d ? '📅 ' + gemPeriodLabel + ' (▼ ' + currentThreshold + '%切号)' : '▼ ' + currentThreshold + '% 切号线'}
-              </span>
-              <span class="live-meta-timer" id="timer_cell_${safeId}" data-reset="${gem ? (gem.resetTime || '') : ''}" data-email="${acc.email}" data-zero="${gemPct === 0 ? '1' : '0'}" data-is7d="${gemIs7d ? '1' : '0'}">
-                ${gemPct === 0 ? `
-                  <span class="cooling-timer-pill">
-                    <span class="cd-pulse-dot"></span>
-                    <span>冷却倒计时:</span>
-                    <strong class="cd-digital-text" id="cd_clock_${safeId}">--:--:--</strong>
-                    <span class="cd-kickstart-hint">归零自动唤醒</span>
-                  </span>
-                ` : `
-                  <span class="active-timer-pill" style="${gemIs7d ? 'background:#fef3c7;border-color:#d97706;color:#92400e;' : ''}">
-                    <span>⏳ ${gemIs7d ? '周重置倒计时:' : '重置倒计时:'}</span>
-                    <strong class="cd-digital-text" id="cd_clock_${safeId}">${formatTime(gem ? gem.resetTime : null)}</strong>
-                  </span>
-                `}
-              </span>
+
+            <!-- Gemini 7天周配额池 -->
+            <div class="sub-quota-row" style="padding:6px 8px;background:#fffdfa;border:1.5px solid #fde68a;border-radius:6px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+                <span style="color:#92400e;font-weight:800;">📅 Gemini / 7天周配额池</span>
+                <strong style="color:${g7dPct <= currentThreshold ? '#dc2626' : '#d97706'};font-family:'JetBrains Mono',monospace;">${g7dPct}%</strong>
+              </div>
+              <div class="quota-track-wrap" style="height:8px;margin-bottom:3px;">
+                <div class="quota-track" style="height:8px;">
+                  <div class="quota-fill" style="width:${Math.max(g7dPct, 3)}%;background:${g7dPct <= currentThreshold ? (g7dPct === 0 ? '#ef4444' : '#f59e0b') : '#d97706'};"></div>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#64748b;">
+                <span style="color:#92400e;font-weight:700;">周周期水位</span>
+                <span class="live-meta-timer" id="timer_g7d_${safeId}" data-reset="${g7dReset || ''}" data-email="${acc.email}" data-zero="${g7dZero ? '1' : '0'}">
+                  ${g7dReset ? '⏳ 周重置: <strong class="cd-digital-text">' + formatTime(g7dReset) + '</strong>' : '⌛ 满血无需重置'}
+                </span>
+              </div>
             </div>
           </div>
 
-          <!-- 第 3 行：Claude 配额（timerType 动态：5h 或 7d） -->
-          <div class="quota-box" style="background:#faf5ff;border-color:#7c3aed;">
-            <div class="quota-box-header">
-              <span style="color:#6b21a8;">📅 ${claudePoolLabel}</span>
-              <strong style="color:#7c3aed;font-family:'JetBrains Mono',monospace;">${claudePct}%</strong>
+          <!-- 🔮 Claude 双周期额度展示 (5小时核心水位 + 7天周配额池) -->
+          <div class="quota-family-container" style="background:#faf5ff;border:2px solid #7c3aed;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-weight:900;color:#6b21a8;font-size:13px;">🔮 Claude 周期额度监控</span>
+                <span style="font-size:10px;background:#f3e8ff;color:#6b21a8;border:1px solid #7c3aed;padding:1px 5px;border-radius:4px;font-weight:800;">5h核心 + 7d周配额</span>
+              </div>
+              ${claudeIs7d ? '<span style="font-size:10.5px;background:#ede9fe;color:#6b21a8;border:1px solid #8b5cf6;padding:1px 6px;border-radius:4px;font-weight:800;">周周期生效中</span>' : ''}
             </div>
-            <div class="quota-track-wrap">
-              <div class="quota-track">
-                <div class="quota-fill ${claudeBarClass}" style="width:${Math.max(claudePct, 3)}%"></div>
+
+            <!-- Claude 5小时核心滚动水位 -->
+            <div class="sub-quota-row" style="margin-bottom:8px;padding:6px 8px;background:#fff;border:1.5px solid #e9d5ff;border-radius:6px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+                <span style="color:#6b21a8;font-weight:700;">⚡ Claude / 5小时核心水位</span>
+                <strong style="color:${c5hPct <= 10 ? '#dc2626' : '#7c3aed'};font-family:'JetBrains Mono',monospace;">${c5hPct}%</strong>
+              </div>
+              <div class="quota-track-wrap" style="height:8px;margin-bottom:3px;">
+                <div class="quota-track" style="height:8px;">
+                  <div class="quota-fill purple ${c5hPct <= 10 ? (c5hPct === 0 ? 'zero' : 'warn') : ''}" style="width:${Math.max(c5hPct, 3)}%;"></div>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#64748b;">
+                <span style="color:#6b21a8;font-weight:700;">5小时滚动</span>
+                <span class="live-meta-timer" id="timer_c5h_${safeId}" data-reset="${c5hReset || ''}" data-email="${acc.email}" data-zero="${c5hZero ? '1' : '0'}">
+                  ${c5hReset ? '⏳ 5h重置: <strong class="cd-digital-text">' + formatTime(c5hReset) + '</strong>' : '⌛ 满血无需重置'}
+                </span>
               </div>
             </div>
-            <div class="quota-meta-row">
-              <span style="color:#7c3aed;">${claudePeriodLabel}</span>
-              <span>⏳ ${formatTime(claude ? claude.resetTime : null)}</span>
+
+            <!-- Claude 7天周配额池 -->
+            <div class="sub-quota-row" style="padding:6px 8px;background:#faf5ff;border:1.5px solid #d8b4fe;border-radius:6px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+                <span style="color:#581c87;font-weight:800;">📅 Claude / 7天周配额池</span>
+                <strong style="color:${c7dPct <= 10 ? '#dc2626' : '#7c3aed'};font-family:'JetBrains Mono',monospace;">${c7dPct}%</strong>
+              </div>
+              <div class="quota-track-wrap" style="height:8px;margin-bottom:3px;">
+                <div class="quota-track" style="height:8px;">
+                  <div class="quota-fill" style="width:${Math.max(c7dPct, 3)}%;background:${c7dPct <= 10 ? (c7dPct === 0 ? '#ef4444' : '#f59e0b') : '#9333ea'};"></div>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#64748b;">
+                <span style="color:#581c87;font-weight:700;">7天周周期水位</span>
+                <span class="live-meta-timer" id="timer_c7d_${safeId}" data-reset="${c7dReset || ''}" data-email="${acc.email}" data-zero="${c7dZero ? '1' : '0'}">
+                  ${c7dReset ? '⏳ 周重置: <strong class="cd-digital-text">' + formatTime(c7dReset) + '</strong>' : '⌛ 满血无需重置'}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -3112,7 +3213,7 @@
 
         const safeId = btoa(email).replace(/=/g, '').replace(/[^a-zA-Z0-9]/g, '_');
         const diff = Math.max(0, Math.floor((new Date(resetStr).getTime() - now) / 1000));
-        const clockEl = document.getElementById('cd_clock_' + safeId);
+        const clockEl = cell.querySelector('.cd-digital-text') || document.getElementById('cd_clock_' + safeId);
 
         if (diff <= 0) {
           if (clockEl) {
