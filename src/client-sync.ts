@@ -265,6 +265,7 @@ if ($s) {
         const rawJson = Buffer.from(stdout.trim(), "base64").toString("utf8");
         const parsed = JSON.parse(rawJson);
         const refreshToken = parsed?.token?.refresh_token;
+        const accessToken = parsed?.token?.access_token;
         if (refreshToken) {
           const matched = accounts.find((a) => a.refreshToken === refreshToken);
           if (matched) {
@@ -272,6 +273,20 @@ if ($s) {
             resolve(matched.email);
             return;
           }
+        }
+        if (accessToken) {
+          fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`)
+            .then((r) => r.json())
+            .then((info: any) => {
+              if (info?.email) {
+                _cachedDetectedClientEmail = info.email;
+                resolve(info.email);
+              } else {
+                resolve(_cachedDetectedClientEmail);
+              }
+            })
+            .catch(() => resolve(_cachedDetectedClientEmail));
+          return;
         }
       } catch {}
       resolve(_cachedDetectedClientEmail);
