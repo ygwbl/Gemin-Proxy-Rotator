@@ -2690,12 +2690,17 @@
         if (claudePct <= 10) claudeBarClass = 'warn';
         if (claudePct === 0) claudeBarClass = 'zero';
 
-        // 动态标签：根据实际 timerType 显示正确的配额池名称
+        // 动态标签：根据实际 timerType 与剩余重置时间，精准识别是 5小时核心水位 还是 7天周配额池
         const claudeTimerType  = claude ? (claude.timerType || '7d') : '7d';
         const gemTimerType     = gem   ? (gem.timerType   || '5h') : '5h';
+        const gemResetMs       = gem && gem.resetTime ? new Date(gem.resetTime).getTime() : 0;
+        const gemDurationMs    = gemResetMs > Date.now() ? (gemResetMs - Date.now()) : 0;
+        const gemIs7d          = gemTimerType === '7d' || gemDurationMs > 6 * 3600 * 1000;
+
         const claudePoolLabel  = claudeTimerType === '5h' ? 'Claude / 5小时核心水位' : 'Claude / 7天周配额池';
-        const claudePeriodLabel= claudeTimerType === '5h' ? '5小时窗口水位'         : '周周期水位';
-        const gemPoolLabel     = gemTimerType   === '7d' ? 'Gemini / 7天周配额'    : 'Gemini / 5小时核心水位';
+        const claudePeriodLabel= claudeTimerType === '5h' ? '5小时核心水位'         : '7天周周期水位';
+        const gemPoolLabel     = gemIs7d ? 'Gemini / 7天周配额池' : 'Gemini / 5小时核心水位';
+        const gemPeriodLabel   = gemIs7d ? '7天周周期配额' : '5小时核心水位';
 
         // 🛡️ 每日安全防封预算计算 (标准 300 次软上限)
         const dailyReq = acc.dailyRequestCount || 0;
@@ -2784,24 +2789,29 @@
             </span>
           </div>
 
-          <!-- 第 2 行：Gemini 5小时核心配额 -->
-          <div class="quota-box ${gemPct === 0 ? 'is-cooldown' : ''}">
+          <!-- 第 2 行：Gemini 配额（智能精准区分 5小时核心水位 vs 7天周配额池） -->
+          <div class="quota-box ${gemPct === 0 ? 'is-cooldown' : ''}" style="${gemIs7d ? 'background:#fffdfa;border-color:#f59e0b;' : ''}">
             <div class="quota-box-header">
-              <div style="display:flex;align-items:center;">
-                <span>🌟 Gemini 5小时核心水位</span>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="${gemIs7d ? 'color:#b45309;font-weight:900;' : ''}">
+                  ${gemIs7d ? '📅 ' + gemPoolLabel : '🌟 ' + gemPoolLabel}
+                </span>
+                ${gemIs7d ? '<span style="font-size:10px;background:#fef3c7;color:#92400e;border:1.5px solid #d97706;padding:1px 6px;border-radius:4px;font-weight:800;">7天周配额</span>' : '<span style="font-size:10px;background:#f0fdf4;color:#166534;border:1px solid #16a34a;padding:1px 6px;border-radius:4px;font-weight:700;">5h核心</span>'}
                 ${gemPct === 0 ? '<span class="cooldown-pill-badge">0% 冷却中</span>' : ''}
               </div>
-              <strong style="color:${gemPct <= currentThreshold ? '#dc2626' : '#16a34a'};font-family:'JetBrains Mono',monospace;">${gemPct}%</strong>
+              <strong style="color:${gemPct <= currentThreshold ? '#dc2626' : (gemIs7d ? '#d97706' : '#16a34a')};font-family:'JetBrains Mono',monospace;">${gemPct}%</strong>
             </div>
             <div class="quota-track-wrap">
               <div class="quota-track">
-                <div class="quota-fill ${gemBarClass}" style="width:${Math.max(gemPct, 3)}%"></div>
+                <div class="quota-fill ${gemBarClass}" style="width:${Math.max(gemPct, 3)}%;${gemIs7d && gemPct > currentThreshold ? 'background:#f59e0b;' : ''}"></div>
                 <div class="threshold-marker" style="left:${currentThreshold}%"></div>
               </div>
             </div>
             <div class="quota-meta-row">
-              <span class="threshold-label-text" style="color:#b45309;font-weight:800;">▼ ${currentThreshold}% 切号线</span>
-              <span class="live-meta-timer" id="timer_cell_${safeId}" data-reset="${gem ? (gem.resetTime || '') : ''}" data-email="${acc.email}" data-zero="${gemPct === 0 ? '1' : '0'}">
+              <span class="threshold-label-text" style="color:${gemIs7d ? '#b45309' : '#b45309'};font-weight:800;">
+                ${gemIs7d ? '📅 ' + gemPeriodLabel + ' (▼ ' + currentThreshold + '%切号)' : '▼ ' + currentThreshold + '% 切号线'}
+              </span>
+              <span class="live-meta-timer" id="timer_cell_${safeId}" data-reset="${gem ? (gem.resetTime || '') : ''}" data-email="${acc.email}" data-zero="${gemPct === 0 ? '1' : '0'}" data-is7d="${gemIs7d ? '1' : '0'}">
                 ${gemPct === 0 ? `
                   <span class="cooling-timer-pill">
                     <span class="cd-pulse-dot"></span>
@@ -2810,8 +2820,8 @@
                     <span class="cd-kickstart-hint">归零自动唤醒</span>
                   </span>
                 ` : `
-                  <span class="active-timer-pill">
-                    <span>⏳ 重置倒计时:</span>
+                  <span class="active-timer-pill" style="${gemIs7d ? 'background:#fef3c7;border-color:#d97706;color:#92400e;' : ''}">
+                    <span>⏳ ${gemIs7d ? '周重置倒计时:' : '重置倒计时:'}</span>
                     <strong class="cd-digital-text" id="cd_clock_${safeId}">${formatTime(gem ? gem.resetTime : null)}</strong>
                   </span>
                 `}
@@ -3123,10 +3133,17 @@
           return;
         }
 
-        const h = Math.floor(diff / 3600);
+        const totalH = Math.floor(diff / 3600);
         const m = Math.floor((diff % 3600) / 60);
         const s = diff % 60;
-        const timeFormatted = h.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+        let timeFormatted = '';
+        if (totalH >= 24) {
+          const d = Math.floor(totalH / 24);
+          const remH = totalH % 24;
+          timeFormatted = d + '天 ' + remH.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+        } else {
+          timeFormatted = totalH.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+        }
 
         if (clockEl) {
           clockEl.innerText = timeFormatted;
