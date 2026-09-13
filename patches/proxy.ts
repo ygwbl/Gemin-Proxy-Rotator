@@ -2443,27 +2443,28 @@ export function startProxy(
         res.end(JSON.stringify({ ok: false, error: "Account not found" }));
         return;
       }
-      try {
-        const provider = providerAdapterForModel(account, "gemini-3.8-flash-high", rotator);
-        if (provider && provider.ensureValidToken) {
-          await provider.ensureValidToken(account);
+      void (async () => {
+        try {
+          const provider = providerAdapterForModel(account, "gemini-3.8-flash-high", rotator);
+          if (provider && provider.ensureValidToken) {
+            await provider.ensureValidToken(account);
+          }
+          const result = await syncAccountToAntigravityClient(
+            account.config.email,
+            account.accessToken,
+            account.config.refreshToken,
+          );
+          (rotator as any).log(
+            `[CLIENT-SYNC] 已将 ${email} 原生同步至反重力客户端凭据与storage.json设备指纹`,
+          );
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (err: any) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: err.message }));
         }
-        const result = await syncAccountToAntigravityClient(
-          account.config.email,
-          account.accessToken,
-          account.config.refreshToken,
-        );
-        (rotator as any).log(
-          `[CLIENT-SYNC] 已将 ${email} 原生同步至反重力客户端凭据与storage.json设备指纹`,
-        );
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(result));
-        return;
-      } catch (err: any) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: false, error: err.message }));
-        return;
-      }
+      })();
+      return;
     }
 
     if (method === "GET" && pathname.startsWith("/api/device-profile/")) {
