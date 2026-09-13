@@ -2612,13 +2612,18 @@
       const accounts = data.accounts;
 
       // 判断哪个账号是"当前正在使用"
-      // 策略⓪: 如果有明确的手动/自动切换指令，无条件以此账号为主力（保证切号实操 100% 可视生效）
+      // 策略⓪: 如果有明确的手动指定主力账号，无条件遵从
       let activeAcc = null;
       if (currentManualActiveEmail) {
         activeAcc = accounts.find(a => a.email === currentManualActiveEmail) || null;
       }
 
-      // 策略①: lastUsed 最近的账号 = 反重力/Cursor 最新实际路由的账号（跟着真实请求走）
+      // 策略①: 本地反重力客户端当前真正登录的账号 (从 Windows 凭据管理器实时捕获，精准对齐 IDE)
+      if (!activeAcc && data.currentClientAccount) {
+        activeAcc = accounts.find(a => a.email === data.currentClientAccount) || null;
+      }
+
+      // 策略②: 最近实际通过代理发送过请求的账号 (lastUsed)
       if (!activeAcc) {
         let maxLastUsed = 0;
         accounts.forEach(a => {
@@ -2626,11 +2631,11 @@
           if (lu > maxLastUsed) { maxLastUsed = lu; activeAcc = a; }
         });
       }
-      // 策略②: 后端路由层 activeForModels 字段
+      // 策略③: 后端路由层 activeForModels 字段
       if (!activeAcc) {
         activeAcc = accounts.find(a => a.activeForModels && a.activeForModels.length > 0) || null;
       }
-      // 策略③: 综合评分兜底（Gemini×2 + Claude×1），避免 0% 平局选错号
+      // 策略④: 综合评分兜底（Gemini×2 + Claude×1）
       if (!activeAcc) {
         let bestScore = -Infinity;
         accounts.forEach(a => {
@@ -2647,7 +2652,10 @@
         const gem = (activeAcc.quota || []).find(q => q.modelKey === 'gemini');
         activeGemPct = gem ? (gem.percentRemaining ?? 0) : 0;
         document.getElementById('primaryHero').innerText = '👑 ' + activeAcc.email;
-        document.getElementById('primaryTag').innerText = '【正在使用中 · 5h 余量 ' + activeGemPct + '%】';
+        const isClientCurrent = (data.currentClientAccount === activeAcc.email);
+        document.getElementById('primaryTag').innerText = isClientCurrent
+          ? '【💻 反重力客户端当前登录号 · 5h 余量 ' + activeGemPct + '%】'
+          : '【正在使用中 · 5h 余量 ' + activeGemPct + '%】';
       }
 
       // 更新 Feature 1: 双模型独立优选分流面板
@@ -2680,6 +2688,7 @@
         const gemPct = gem ? gem.percentRemaining : 0;
         const claudePct = claude ? claude.percentRemaining : 0;
         const isInUse = (acc === activeAcc);
+        const isClientCurrent = (data.currentClientAccount === acc.email);
         const safeId = btoa(acc.email).replace(/=/g, '').replace(/[^a-zA-Z0-9]/g, '_');
 
         let gemBarClass = '';
@@ -2690,76 +2699,33 @@
         if (claudePct <= 10) claudeBarClass = 'warn';
         if (claudePct === 0) claudeBarClass = 'zero';
 
-        // 🌟 计算四大独立配额（Gemini 5小时 + Gemini 7天周配额，Claude 5小时 + Claude 7天周配额）
-        const claudeTimerType  = claude ? (claude.timerType || '7d') : '7d';
-        const gemTimerType     = gem   ? (gem.timerType   || '5h') : '5h';
-        const gemResetMs       = gem && gem.resetTime ? new Date(gem.resetTime).getTime() : 0;
-        const gemDurationMs    = gemResetMs > Date.now() ? (gemResetMs - Date.now()) : 0;
-        const gemIs7d          = gemTimerType === '7d' || gemDurationMs > 6 * 3600 * 1000;
+        // 🌟 读取 Google 官方原生的四大独立配额池（由 retrieveUserQuotaSummary 接口直供）
+        const g5hObj     = (acc.quota || []).find(q => q.modelKey === 'gemini-5h');
+        const gWeeklyObj = (acc.quota || []).find(q => q.modelKey === 'gemini-weekly');
+        const c5hObj     = (acc.quota || []).find(q => q.modelKey === 'claude-5h');
+        const cWeeklyObj = (acc.quota || []).find(q => q.modelKey === 'claude-weekly');
 
-        const claudeResetMs    = claude && claude.resetTime ? new Date(claude.resetTime).getTime() : 0;
-        const claudeDurationMs = claudeResetMs > Date.now() ? (claudeResetMs - Date.now()) : 0;
-        const claudeIs7d       = claudeTimerType === '7d' || claudeDurationMs > 6 * 3600 * 1000;
+        // Gemini 5h 与 7天周配额
+        let g5hPct = g5hObj ? g5hObj.percentRemaining : (gem ? gem.percentRemaining : 0);
+        let g5hReset = g5hObj ? g5hObj.resetTime : (gem ? gem.resetTime : null);
+        let g5hZero = (g5hPct === 0);
 
-        // Gemini 双配额构建
-        let g5hPct = gemPct, g5hReset = null, g5hZero = (gemPct === 0);
-        let g7dPct = gemPct, g7dReset = null, g7dZero = (gemPct === 0);
+        let g7dPct = gWeeklyObj ? gWeeklyObj.percentRemaining : (gem && gem.timerType === '7d' ? gem.percentRemaining : 100);
+        let g7dReset = gWeeklyObj ? gWeeklyObj.resetTime : (gem && gem.timerType === '7d' ? gem.resetTime : null);
+        let g7dZero = (g7dPct === 0);
 
-        if (gemIs7d) {
-          // 当前触发 7 天周周期限制 (如 112 小时, 余 9%)
-          g7dPct = gemPct;
-          g7dReset = gem.resetTime;
-          g7dZero = (gemPct === 0);
-          g5hPct = gemPct;
-          g5hReset = gem.resetTime;
-          g5hZero = (gemPct === 0);
-        } else if (gemDurationMs > 0) {
-          // 当前处于 5 小时滚动周期冷却/重置 (如 3小时, 余 68%)
-          g5hPct = gemPct;
-          g5hReset = gem.resetTime;
-          g5hZero = (gemPct === 0);
-          g7dPct = 100;
-          g7dReset = null;
-          g7dZero = false;
-        } else {
-          // 100% 满血
-          g5hPct = gemPct;
-          g5hReset = null;
-          g5hZero = false;
-          g7dPct = 100;
-          g7dReset = null;
-          g7dZero = false;
-        }
+        // Claude 5h 与 7天周配额
+        let c5hPct = c5hObj ? c5hObj.percentRemaining : (claude && claude.timerType === '5h' ? claude.percentRemaining : 100);
+        let c5hReset = c5hObj ? c5hObj.resetTime : (claude && claude.timerType === '5h' ? claude.resetTime : null);
+        let c5hZero = (c5hPct === 0);
 
-        // Claude 双配额构建
-        let c5hPct = claudePct, c5hReset = null, c5hZero = (claudePct === 0);
-        let c7dPct = claudePct, c7dReset = null, c7dZero = (claudePct === 0);
+        let c7dPct = cWeeklyObj ? cWeeklyObj.percentRemaining : (claude ? claude.percentRemaining : 0);
+        let c7dReset = cWeeklyObj ? cWeeklyObj.resetTime : (claude ? claude.resetTime : null);
+        let c7dZero = (c7dPct === 0);
 
-        if (claudeIs7d) {
-          // 当前触发 7 天周周期限制 (如 3天17小时, 余 0%)
-          c7dPct = claudePct;
-          c7dReset = claude.resetTime;
-          c7dZero = (claudePct === 0);
-          c5hPct = claudePct;
-          c5hReset = claude.resetTime;
-          c5hZero = (claudePct === 0);
-        } else if (claudeDurationMs > 0) {
-          // 处于 5 小时滚动限制
-          c5hPct = claudePct;
-          c5hReset = claude.resetTime;
-          c5hZero = (claudePct === 0);
-          c7dPct = 100;
-          c7dReset = null;
-          c7dZero = false;
-        } else {
-          // 100% 满血
-          c5hPct = claudePct;
-          c5hReset = null;
-          c5hZero = false;
-          c7dPct = 100;
-          c7dReset = null;
-          c7dZero = false;
-        }
+        // 判定周周期标签
+        const gemIs7d = (gWeeklyObj && gWeeklyObj.percentRemaining < 100 && gWeeklyObj.resetTime);
+        const claudeIs7d = (cWeeklyObj && cWeeklyObj.percentRemaining < 100 && cWeeklyObj.resetTime);
 
         // 🛡️ 每日安全防封预算计算 (标准 300 次软上限)
         const dailyReq = acc.dailyRequestCount || 0;
@@ -2840,11 +2806,12 @@
           <!-- 第 1 行：账号身份与状态标 -->
           <div class="acc-top">
             <div class="acc-email-title">
-              <span>${isInUse ? '🟢' : '⚪'}</span>
+              <span>${isInUse ? '🟢' : (isClientCurrent ? '💻' : '⚪')}</span>
               <span>${acc.email}</span>
+              ${isClientCurrent ? '<span style="font-size:10px;background:#e0e7ff;color:#3730a3;border:1px solid #818cf8;padding:1px 6px;border-radius:4px;font-weight:bold;margin-left:6px;">反重力客户端登录中</span>' : ''}
             </div>
             <span class="acc-role-badge ${isInUse ? 'role-in-use' : 'role-standby'}">
-              ${isInUse ? '● 正在使用 (主力承接)' : '○ 备用待命 (余量≤' + currentThreshold + '%自动接管)'}
+              ${isInUse ? (isClientCurrent ? '● 正在使用 (反重力客户端当前登录号)' : '● 正在使用 (主力承接)') : (isClientCurrent ? '💻 反重力当前登录 (随时切为主力)' : '○ 备用待命 (余量≤' + currentThreshold + '%自动接管)')}
             </span>
           </div>
 

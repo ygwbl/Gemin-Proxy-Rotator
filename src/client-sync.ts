@@ -1,4 +1,4 @@
-﻿import fs from "fs";
+import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { execFile } from "child_process";
@@ -196,4 +196,85 @@ export async function syncAccountToAntigravityClient(
     message: `已成功将 ${email} 同步至反重力客户端！已绑定独立设备指纹。`,
     deviceProfile: profile,
   };
+}
+
+let _cachedDetectedClientEmail: string | null = null;
+let _lastDetectTime = 0;
+
+export async function detectCurrentClientAccount(
+  accounts: Array<{ email: string; refreshToken?: string }>
+): Promise<string | null> {
+  const now = Date.now();
+  if (_cachedDetectedClientEmail !== null && now - _lastDetectTime < 5000) {
+    return _cachedDetectedClientEmail;
+  }
+
+  const psScript = `
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class CredReader {
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern bool CredRead(string target, int type, int reservedFlag, out IntPtr credentialPtr);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern void CredFree(IntPtr cred);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct CREDENTIAL {
+        public int Flags;
+        public int Type;
+        public string TargetName;
+        public string Comment;
+        public long LastWritten;
+        public int CredentialBlobSize;
+        public IntPtr CredentialBlob;
+        public int Persist;
+        public int AttributeCount;
+        public IntPtr Attributes;
+        public string TargetAlias;
+        public string UserName;
+    }
+
+    public static string Read(string target) {
+        IntPtr credPtr;
+        if (CredRead(target, 1, 0, out credPtr)) {
+            CREDENTIAL cred = (CREDENTIAL)Marshal.PtrToStructure(credPtr, typeof(CREDENTIAL));
+            byte[] b = new byte[cred.CredentialBlobSize];
+            Marshal.Copy(cred.CredentialBlob, b, 0, cred.CredentialBlobSize);
+            CredFree(credPtr);
+            return System.Text.Encoding.UTF8.GetString(b);
+        }
+        return null;
+    }
+}
+"@
+$s = [CredReader]::Read("${CREDENTIAL_TARGET}")
+if ($s) {
+    [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($s))
+}
+`;
+
+  return new Promise((resolve) => {
+    execFile("powershell", ["-NoProfile", "-Command", psScript], (err, stdout) => {
+      _lastDetectTime = Date.now();
+      if (err || !stdout.trim()) {
+        resolve(_cachedDetectedClientEmail);
+        return;
+      }
+      try {
+        const rawJson = Buffer.from(stdout.trim(), "base64").toString("utf8");
+        const parsed = JSON.parse(rawJson);
+        const refreshToken = parsed?.token?.refresh_token;
+        if (refreshToken) {
+          const matched = accounts.find((a) => a.refreshToken === refreshToken);
+          if (matched) {
+            _cachedDetectedClientEmail = matched.email;
+            resolve(matched.email);
+            return;
+          }
+        }
+      } catch {}
+      resolve(_cachedDetectedClientEmail);
+    });
+  });
 }
