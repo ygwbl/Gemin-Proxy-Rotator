@@ -306,6 +306,7 @@ export async function fetchProviderQuota(
               percentRemaining: g5h.percentRemaining,
               resetTime: g5h.resetTime,
               timerType: "5h",
+              officialDescription: (g5h as any).description,
             } as any);
           }
           if (gWeekly) {
@@ -315,6 +316,7 @@ export async function fetchProviderQuota(
               percentRemaining: gWeekly.percentRemaining,
               resetTime: gWeekly.resetTime,
               timerType: "7d",
+              officialDescription: (gWeekly as any).description,
             } as any);
           }
           if (c5h) {
@@ -324,6 +326,7 @@ export async function fetchProviderQuota(
               percentRemaining: c5h.percentRemaining,
               resetTime: c5h.resetTime,
               timerType: "5h",
+              officialDescription: (c5h as any).description,
             } as any);
           }
           if (cWeekly) {
@@ -333,6 +336,7 @@ export async function fetchProviderQuota(
               percentRemaining: cWeekly.percentRemaining,
               resetTime: cWeekly.resetTime,
               timerType: "7d",
+              officialDescription: (cWeekly as any).description,
             } as any);
           }
 
@@ -355,6 +359,36 @@ export async function fetchProviderQuota(
               mainClaude.timerType = "5h";
             }
           }
+        }
+      }
+    } catch {}
+
+    // 🌟 原生直连 Google 官方计划与身份端点 (loadCodeAssist)
+    try {
+      const tierUrl = "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist";
+      const tierRes = await fetchWithRetry(tierUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${account.accessToken}`,
+          "User-Agent": QUOTA_USER_AGENT,
+        },
+        body: JSON.stringify({ metadata: { ideType: "ANTIGRAVITY" } }),
+        timeoutMs: 8000,
+        dispatcher: getAccountProxyDispatcher(account, "google-antigravity"),
+      });
+
+      if (tierRes.ok) {
+        const tierData = (await tierRes.json()) as any;
+        if (tierData?.currentTier) {
+          (account as any).officialTier = {
+            id: tierData.currentTier.id || "free-tier",
+            name: tierData.currentTier.name || "Antigravity",
+            description: tierData.currentTier.description || "",
+            project: tierData.cloudaicompanionProject || "aicode-consumers",
+            upgradeText: tierData.currentTier.upgradeSubscriptionText || "",
+          };
+          (account as any).officialProject = tierData.cloudaicompanionProject || "aicode-consumers";
         }
       }
     } catch {}

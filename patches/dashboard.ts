@@ -121,6 +121,17 @@ export async function serveStatusApi(
     status.currentClientAccount = await detectCurrentClientAccount(accountsData);
   } catch {}
 
+  try {
+    status.accounts = (status.accounts || []).map((acc: any) => {
+      const realAcc = rotator.accounts.find((a) => a.config.email === acc.email) as any;
+      if (realAcc?.officialTier) {
+        acc.officialTier = realAcc.officialTier;
+        acc.officialProject = realAcc.officialProject || realAcc.officialTier.project || "aicode-consumers";
+      }
+      return acc;
+    });
+  } catch {}
+
   res.writeHead(200, {
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
