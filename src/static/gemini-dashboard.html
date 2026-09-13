@@ -1895,29 +1895,49 @@
     </div>
   </div>
 
-  <!-- 客户端接入配置弹窗 (系统优化项：全面指引各种客户端接入) -->
+  <!-- 客户端接入配置弹窗 (全面支持 OpenAI / Anthropic 原生 / 反重力客户端) -->
   <div class="modal-overlay" id="configModal">
-    <div class="modal-card">
+    <div class="modal-card" style="max-width:620px;">
       <div class="modal-header">
-        <div class="modal-title">📋 客户端接入配置指引</div>
+        <div class="modal-title">📋 客户端接入与原生换号指引</div>
         <button class="modal-close" onclick="closeConfigModal()">✖</button>
       </div>
       
-      <div style="font-size:13px;color:#475569;margin-bottom:14px;">
-        支持无缝接入 <strong>Cursor、Cline、NextChat、Open-WebUI、沉浸式翻译</strong> 等所有兼容 OpenAI 格式的客户端：
+      <!-- 模式一：OpenAI 兼容协议 -->
+      <div style="font-size:12.5px;font-weight:900;color:#0f172a;margin-bottom:6px;">
+        1. OpenAI 兼容协议（WorkBuddy、Cursor、NextChat、Cherry Studio、沉浸式翻译）:
       </div>
-
-      <div style="background:#f8fafc;border:2px solid #000;border-radius:8px;padding:12px;margin-bottom:12px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.8;">
+      <div style="background:#f8fafc;border:1.5px solid #000;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;">
         <div><strong>Base URL:</strong> <code style="color:#2563eb;">http://127.0.0.1:51200/v1</code></div>
         <div><strong>API Key:</strong> <code style="color:#16a34a;">tuxevil</code> (或任意非空字符)</div>
-        <div><strong>推荐模型:</strong> <code style="color:#d97706;">gemini-3.8-flash-high</code> (思考链版)</div>
-        <div><strong>备用极速:</strong> <code style="color:#d97706;">gemini-3.7-flash</code></div>
+        <div><strong>Gemini模型:</strong> <code style="color:#d97706;">gemini-3.8-flash-high</code> (思考链版，支持多模态识图)</div>
         <div><strong>Claude模型:</strong> <code style="color:#9333ea;">claude-sonnet-4-6</code></div>
+      </div>
+
+      <!-- 模式二：Anthropic 原生协议 -->
+      <div style="font-size:12.5px;font-weight:900;color:#0f172a;margin-bottom:6px;">
+        2. Anthropic 原生协议（Claude Code CLI、官方 SDK、原生思维链）:
+      </div>
+      <div style="background:#faf5ff;border:1.5px solid #7c3aed;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;">
+        <div><strong>端点地址:</strong> <code style="color:#7c3aed;">http://127.0.0.1:51200/v1/messages</code></div>
+        <div><strong>环境变量:</strong> <code style="color:#6b21a8;">$env:ANTHROPIC_BASE_URL="http://127.0.0.1:51200"</code></div>
+        <div><strong>API Key:</strong> <code style="color:#16a34a;">$env:ANTHROPIC_API_KEY="tuxevil"</code></div>
+      </div>
+
+      <!-- 模式三：反重力 IDE 原生换号 -->
+      <div style="font-size:12.5px;font-weight:900;color:#0f172a;margin-bottom:6px;">
+        3. 🌟 反重力 IDE / CLI 客户端原生直接换号（无需配代理）:
+      </div>
+      <div style="background:#f0fdf4;border:1.5px solid #16a34a;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;line-height:1.6;color:#166534;">
+        直接在下方任意账号卡片点击 <strong>「💻 同步至反重力」</strong> 按钮，系统将自动将该账号凭证与独一无二的防封设备指纹直接写入系统凭据库，重新启动反重力客户端即可直接以该身份运行！
       </div>
 
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button class="brutal-btn btn-green" onclick="copyConfig()">
-          📋 一键复制全部参数
+          📋 复制 OpenAI 参数
+        </button>
+        <button class="brutal-btn btn-yellow" onclick="copyAnthropicConfig()">
+          📋 复制 Claude CLI 变量
         </button>
         <button class="brutal-btn btn-dark" onclick="closeConfigModal()">
           关闭
@@ -2285,6 +2305,19 @@
       });
     }
 
+    function copyAnthropicConfig() {
+      const text = '# PowerShell 环境变量设置 (Claude Code CLI / 原生 SDK):\n$env:ANTHROPIC_BASE_URL="http://127.0.0.1:51200"\n$env:ANTHROPIC_API_KEY="tuxevil"\n\n# Bash / Linux / macOS:\nexport ANTHROPIC_BASE_URL="http://127.0.0.1:51200"\nexport ANTHROPIC_API_KEY="tuxevil"';
+      navigator.clipboard.writeText(text).then(() => {
+        if (typeof showToast === 'function') {
+          showToast('📋 已复制 Claude CLI 配置', '已成功复制环境变量命令到剪贴板，直接粘贴到终端回车即可生效！');
+        } else {
+          alert('✅ 已复制 Claude CLI 环境变量到剪贴板！\n\n' + text);
+        }
+      }).catch(() => {
+        alert('✅ 请手动复制：\n\n' + text);
+      });
+    }
+
     function formatTime(resetStr) {
       if (!resetStr) return '满血无需重置';
       const diff = Math.max(0, Math.floor((new Date(resetStr).getTime() - Date.now()) / 1000));
@@ -2512,6 +2545,40 @@
           fetchStatus(false);
         } else {
           alert('切换失败: ' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('请求失败: ' + e.message);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = oldText;
+        }
+      }
+    }
+
+    // ─── 🌟 客户端原生换号（写入 Windows 凭据管理器与独立设备指纹） ───
+    async function syncClientAccount(email, ev) {
+      const e = ev || (typeof window !== 'undefined' ? window.event : null);
+      const btn = e ? (e.currentTarget || e.target) : null;
+      const oldText = btn ? btn.innerText : '💻 同步至反重力';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = '⏳ 注入中...';
+      }
+
+      try {
+        const res = await fetch('/api/sync-client/' + encodeURIComponent(email), {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(
+            '💻 客户端同步成功',
+            '已成功将 ' + email + ' 写入 Windows 凭据管理器，并绑定专属防封设备指纹！重新打开反重力 IDE / CLI 即可直接以该账号登录运行。'
+          );
+        } else {
+          alert('客户端同步失败: ' + (data.error || data.message || '未知错误'));
         }
       } catch (e) {
         alert('请求失败: ' + e.message);
@@ -2788,24 +2855,28 @@
             <span>今日: <strong>${dailyReq} 次</strong></span>
             <span>累计: <strong>${acc.totalRequests || 0} 次</strong></span>
             <span>健康: <strong title="基于当前剩余配额水位计算，冷却重置满血后自动回升至 1.00">${acc.healthScore != null ? acc.healthScore.toFixed(2) : '1.00'}</strong> <span style="font-size:10.5px;font-weight:900;color:${(acc.healthScore || 1) < 0.2 ? '#ea580c' : '#16a34a'};">${(acc.healthScore || 1) < 0.2 ? '(余量低)' : '(优良)'}</span></span>
+            <span>防封: <strong style="color:#0284c7;font-size:10.5px;" title="已绑定独立虚拟硬件设备指纹，彻底防止多账号关联连坐">🛡️ 独立隔离</strong></span>
           </div>
 
           <!-- 单号测速内嵌实时结果栏 (免弹窗) -->
           <div id="speedResult_${safeId}" class="card-speed-result" style="display:none;margin-bottom:8px;"></div>
 
-          <!-- 第 7 行：底部动作操作栏 (自由切换账号按钮，已去除笨拙的演练字样) -->
+          <!-- 第 7 行：底部动作操作栏 -->
           <div class="acc-card-footer">
-            <div style="display:flex;align-items:center;gap:6px;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               <button class="brutal-btn btn-test-account" onclick="testSpecificAccount('${acc.email}', '${safeId}')" title="单独测试该账号延时">
                 ⚡ 单号测速
               </button>
               ${isInUse ? `
                 <span class="btn-primary-badge" title="当前承接全部请求的主控账号">👑 当前在用</span>
               ` : `
-                <button class="btn-switch-account" onclick="freeSwitchAccount('${acc.email}')" title="立即将该账号设为当前主控">
-                  🔄 切换账号
+                <button class="btn-switch-account" onclick="freeSwitchAccount('${acc.email}')" title="立即将该账号设为当前代理主控">
+                  🔄 切换代理
                 </button>
               `}
+              <button class="brutal-btn btn-client-sync" onclick="syncClientAccount('${acc.email}')" title="一键将该账号及独立设备指纹写入 Windows 凭据管理器，真正替换反重力 IDE 客户端登录身份">
+                💻 同步至反重力
+              </button>
             </div>
             <button class="brutal-btn btn-red-outline" onclick="removeAccount('${acc.email}')" title="移除该账号">
               🗑️ 移除

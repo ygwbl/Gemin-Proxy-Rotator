@@ -86,6 +86,7 @@ import {
   type FlagPattern,
 } from "./telemetry.js";
 import type { FlagEventData } from "./telemetry.js";
+import { syncAccountToAntigravityClient, getAccountDeviceProfile } from "./client-sync.js";
 
 /**
  * Provider adapter for a request on a (possibly multi-provider) account.
@@ -2428,6 +2429,49 @@ export function startProxy(
       }
       res.writeHead(404, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: "Account not found" }));
+      return;
+    }
+
+    if (method === "POST" && pathname.startsWith("/api/sync-client/")) {
+      if (!requireAdmin(req, res)) return;
+      const email = decodeURIComponent(pathname.slice("/api/sync-client/".length));
+      const account = rotator.accounts.find(
+        (a) => a.config.email === email || a.config.label === email,
+      );
+      if (!account) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "Account not found" }));
+        return;
+      }
+      try {
+        const provider = providerAdapterForModel(account, "gemini-3.8-flash-high", rotator);
+        if (provider && provider.ensureValidToken) {
+          await provider.ensureValidToken(account);
+        }
+        const result = await syncAccountToAntigravityClient(
+          account.config.email,
+          account.accessToken,
+          account.config.refreshToken,
+        );
+        (rotator as any).log(
+          `[CLIENT-SYNC] 已将 ${email} 原生同步至反重力客户端凭据与storage.json设备指纹`,
+        );
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+        return;
+      } catch (err: any) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+        return;
+      }
+    }
+
+    if (method === "GET" && pathname.startsWith("/api/device-profile/")) {
+      if (!requireAdmin(req, res)) return;
+      const email = decodeURIComponent(pathname.slice("/api/device-profile/".length));
+      const profile = getAccountDeviceProfile(email);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, email, profile }));
       return;
     }
 

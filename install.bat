@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 echo.
 echo  ╔══════════════════════════════════════════╗
@@ -43,15 +43,28 @@ if %errorlevel% neq 0 (
 )
 echo [✓] 仪表盘替换完成
 
-:: 替换 proxy 核心
-echo [*] 正在替换双模型分流逻辑...
-copy /Y "patches\proxy.ts" "%NPM_ROOT%\tuxevil-rotator\src\proxy.ts" >nul
+:: 写入客户端换号与设备隔离模块
+echo [*] 正在注入客户端原生换号与虚拟指纹隔离模块...
+copy /Y "src\client-sync.ts" "%NPM_ROOT%\tuxevil-rotator\src\client-sync.ts" >nul
 if %errorlevel% neq 0 (
-    echo [错误] proxy 文件替换失败
+    echo [错误] client-sync 文件复制失败
     pause
     exit /b 1
 )
-echo [✓] 双模型分流逻辑替换完成
+echo [✓] 客户端换号与设备隔离模块注入完成
+
+:: 替换 proxy 核心
+echo [*] 正在替换代理核心与 Anthropic 协议支持...
+copy /Y "patches\proxy.ts" "%NPM_ROOT%\tuxevil-rotator\src\proxy.ts" >nul
+copy /Y "patches\compat.ts" "%NPM_ROOT%\tuxevil-rotator\src\compat.ts" >nul
+copy /Y "patches\types.ts" "%NPM_ROOT%\tuxevil-rotator\src\types.ts" >nul
+copy /Y "patches\providers\google-antigravity\forward.ts" "%NPM_ROOT%\tuxevil-rotator\src\providers\google-antigravity\forward.ts" >nul
+if %errorlevel% neq 0 (
+    echo [错误] 核心补丁替换失败
+    pause
+    exit /b 1
+)
+echo [✓] 核心补丁与模型路由规则替换完成
 
 echo.
 echo  ════════════════════════════════════════
