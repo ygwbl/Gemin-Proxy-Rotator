@@ -1859,18 +1859,31 @@
         添加新的 Google Antigravity 账号后，系统将自动把其纳入智能轮换池中进行统一调度与阈值自动切号。
       </div>
 
-      <!-- 方式一：网页一键登录 -->
-      <div style="background:#f8fafc;border:2px solid #000;border-radius:8px;padding:14px;margin-bottom:14px;">
-        <div style="font-weight:900;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
-          <span>🌐 方式一：在浏览器中直接登录</span>
-          <span style="font-size:10px;background:#22c55e;color:#fff;padding:2px 6px;border-radius:4px;">推荐</span>
+      <!-- 方式一：网页一键全自动登录 -->
+      <div style="background:#f0fdf4;border:2px solid #16a34a;border-radius:8px;padding:14px;margin-bottom:14px;">
+        <div style="font-weight:900;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:6px;color:#166534;">
+          <span>🌐 方式一：全自动授权登录（推荐 · 0 复制）</span>
+          <span style="font-size:10px;background:#22c55e;color:#fff;padding:2px 6px;border-radius:4px;">秒级直连</span>
         </div>
-        <div style="font-size:12px;color:#64748b;margin-bottom:10px;">
-          点击下方按钮将在新标签页中打开官方登录向导，登录你的 Google 账号并完成授权。
+        <div style="font-size:12px;color:#15803d;margin-bottom:10px;line-height:1.5;">
+          点击下方按钮直达 Google 授权。授权完成后，后台 51121 端口将<strong>全自动捕获凭据入库</strong>，无需复制粘贴任何网址！
         </div>
-        <button class="brutal-btn btn-green" style="width:100%;justify-content:center;" onclick="startBrowserLogin()">
-          🚀 打开 Google 登录向导页面
+        <button class="brutal-btn btn-green" style="width:100%;justify-content:center;padding:12px;font-size:14px;" onclick="startBrowserLogin()">
+          🚀 直连 Google 授权（全自动免复制）
         </button>
+      </div>
+
+      <!-- 方式二：多平台向导与手动模式 -->
+      <div style="background:#f8fafc;border:2px solid #000;border-radius:8px;padding:14px;margin-bottom:14px;">
+        <div style="font-weight:900;font-size:13.5px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
+          <span>📋 方式二：备用向导模式 (Codex / Ollama / 手动粘贴)</span>
+          <button class="brutal-btn btn-yellow" style="padding:4px 10px;font-size:11px;" onclick="startGuideLogin()">
+            打开向导
+          </button>
+        </div>
+        <div style="font-size:12px;color:#64748b;">
+          支持添加 OpenAI Codex、Ollama Cloud 等三方平台，或在自动捕获受阻时手动粘贴重定向网址。
+        </div>
       </div>
 
       <!-- 方式二：终端命令行添加 -->
@@ -2049,6 +2062,10 @@
     }
 
     function startBrowserLogin() {
+      window.open('/auth/google-start?token=' + encodeURIComponent(token), '_blank');
+    }
+
+    function startGuideLogin() {
       window.open('/login-cli?token=' + encodeURIComponent(token), '_blank');
     }
 

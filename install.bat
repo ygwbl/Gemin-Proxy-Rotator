@@ -58,6 +58,7 @@ echo [*] 正在替换代理核心与 Anthropic 协议支持...
 copy /Y "patches\proxy.ts" "%NPM_ROOT%\tuxevil-rotator\src\proxy.ts" >nul
 copy /Y "patches\compat.ts" "%NPM_ROOT%\tuxevil-rotator\src\compat.ts" >nul
 copy /Y "patches\types.ts" "%NPM_ROOT%\tuxevil-rotator\src\types.ts" >nul
+copy /Y "patches\onboarding.ts" "%NPM_ROOT%\tuxevil-rotator\src\onboarding.ts" >nul
 copy /Y "patches\providers\google-antigravity\forward.ts" "%NPM_ROOT%\tuxevil-rotator\src\providers\google-antigravity\forward.ts" >nul
 if %errorlevel% neq 0 (
     echo [错误] 核心补丁替换失败

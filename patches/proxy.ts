@@ -74,6 +74,8 @@ import {
   startHostedLogin,
   serveCliLogin,
   handleCliLoginApi,
+  startGoogleDirectLogin,
+  handleAutoOAuthCallback,
 } from "./onboarding.js";
 import { requireAdmin, isAdminAuthorized, getConfiguredAdminToken } from "./admin-auth.js";
 import { PayloadTooLargeError, readLimitedBody } from "./body-limit.js";
@@ -2219,6 +2221,13 @@ export function startProxy(
       return;
     }
 
+    if (method === "GET" && pathname === "/auth/google-start") {
+      if (!requireAdmin(req, res)) return;
+      trackFeature("googleDirectLogin");
+      startGoogleDirectLogin(res);
+      return;
+    }
+
     if (method === "GET" && pathname === "/login-cli") {
       if (!requireAdmin(req, res)) return;
       trackFeature("cliLogin");
@@ -2856,6 +2865,69 @@ export function startProxy(
     socket.destroy();
   });
 
+  // ─── 🌟 自动监听 51121 端口以无缝捕获 Google OAuth 回调 ───
+  let callbackServer: Server | null = null;
+  try {
+    callbackServer = createServer(async (req, res) => {
+      const reqUrl = req.url || "";
+      const pathname = reqUrl.split("?")[0];
+      if (pathname === "/oauth-callback") {
+        const urlObj = new URL(reqUrl, "http://localhost:51121");
+        const code = urlObj.searchParams.get("code");
+        const state = urlObj.searchParams.get("state");
+        const error = urlObj.searchParams.get("error");
+        const errorDesc = urlObj.searchParams.get("error_description");
+
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+
+        if (error) {
+          res.writeHead(400);
+          res.end(renderOAuthResultHtml(false, `授权已取消: ${errorDesc || error}`));
+          return;
+        }
+
+        if (!code || !state) {
+          res.writeHead(400);
+          res.end(renderOAuthResultHtml(false, "缺少授权码 (code) 或状态校验参数 (state)"));
+          return;
+        }
+
+        const result = await handleAutoOAuthCallback(code, state, rotator);
+        if (result.ok) {
+          log(`[OAUTH] 🎉 Google 账号 ${result.email} 自动授权成功并加入轮换池`, rotator);
+          res.writeHead(200);
+          res.end(renderOAuthResultHtml(true, result.email || ""));
+        } else {
+          log(`[OAUTH] 账号授权失败: ${result.error}`, rotator, "warn");
+          res.writeHead(400);
+          res.end(renderOAuthResultHtml(false, result.error || "授权失败"));
+        }
+        return;
+      }
+
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Not Found");
+    });
+
+    callbackServer.on("error", (err: any) => {
+      log(`[OAUTH] 51121 自动回调端口监听通知: ${err.message}`, rotator, "warn");
+    });
+
+    callbackServer.listen(51121, () => {
+      log(`[OAUTH] ✅ 51121 自动 OAuth 回调监听服务就绪: http://localhost:51121/oauth-callback`, rotator);
+    });
+  } catch (err: any) {
+    log(`[OAUTH] 启动 51121 回调服务失败: ${err.message}`, rotator, "warn");
+  }
+
+  const origClose = server.close.bind(server);
+  server.close = (cb?: (err?: Error) => void) => {
+    if (callbackServer) {
+      try { callbackServer.close(); } catch {}
+    }
+    return origClose(cb);
+  };
+
   server.listen(port, bindHost, () => {
     log(`Listening on ${bindHost}:${port}`, rotator);
     log(`Dashboard: http://localhost:${port}/dashboard`, rotator);
@@ -2863,4 +2935,129 @@ export function startProxy(
     log(`Hosted login: http://localhost:${port}/login`, rotator);
   });
   return server;
+}
+
+function renderOAuthResultHtml(success: boolean, messageOrEmail: string): string {
+  const safeText = String(messageOrEmail)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+  if (success) {
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎉 账号授权成功 - Gemini Proxy Rotator</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc;
+      display: flex; align-items: center; justify-content: center; min-height: 100vh;
+    }
+    .card {
+      background: #ffffff;
+      border: 3px solid #000;
+      border-radius: 16px;
+      box-shadow: 6px 6px 0px #000;
+      padding: 40px 36px;
+      max-width: 480px; width: 100%;
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      background: #22c55e; color: #fff;
+      font-weight: 800; font-size: 13px;
+      padding: 6px 16px; border-radius: 999px;
+      border: 2px solid #000; margin-bottom: 18px;
+    }
+    h1 { margin: 0 0 12px; font-size: 24px; font-weight: 900; color: #0f172a; }
+    p { margin: 0 0 20px; font-size: 14px; color: #64748b; line-height: 1.6; }
+    .email-chip {
+      background: #f1f5f9; border: 2px solid #000; border-radius: 8px;
+      padding: 12px 16px; font-family: monospace;
+      font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 24px;
+      word-break: break-all;
+    }
+    .btn-group { display: flex; gap: 12px; justify-content: center; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 12px 24px; font-size: 14px; font-weight: 800;
+      border-radius: 8px; border: 2px solid #000; cursor: pointer;
+      text-decoration: none;
+    }
+    .btn-primary { background: #000; color: #fff; box-shadow: 3px 3px 0px rgba(0,0,0,0.2); }
+    .btn-primary:hover { background: #1e293b; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">✨ 自动授权成功</div>
+    <h1>Google 账号接入成功！</h1>
+    <div class="email-chip">${safeText}</div>
+    <p>凭证已成功兑换并自动纳入智能轮换池中。<br>本窗口将在 <span id="sec" style="font-weight:900;color:#000;">3</span> 秒后自动关闭。</p>
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="window.close()">关闭此窗口</button>
+      <a class="btn" style="background:#fef08a;color:#854d0e;" href="http://localhost:51200" target="_self">返回仪表盘</a>
+    </div>
+  </div>
+  <script>
+    let countdown = 3;
+    const interval = setInterval(() => {
+      countdown--;
+      const el = document.getElementById('sec');
+      if (el) el.innerText = countdown;
+      if (countdown <= 0) {
+        clearInterval(interval);
+        try { window.close(); } catch(e){}
+      }
+    }, 1000);
+  </script>
+</body>
+</html>`;
+  } else {
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>⚠️ 授权提示 - Gemini Proxy Rotator</title>
+  <style>
+    body {
+      margin: 0; padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh;
+    }
+    .card {
+      background: #ffffff; border: 3px solid #000; border-radius: 16px;
+      box-shadow: 6px 6px 0px #000; padding: 40px 36px; max-width: 480px; width: 100%; text-align: center;
+    }
+    .badge {
+      display: inline-block; background: #ef4444; color: #fff;
+      font-weight: 800; font-size: 13px; padding: 6px 16px; border-radius: 999px;
+      border: 2px solid #000; margin-bottom: 18px;
+    }
+    h1 { margin: 0 0 12px; font-size: 22px; font-weight: 900; color: #0f172a; }
+    p { margin: 0 0 24px; font-size: 14px; color: #64748b; line-height: 1.6; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 12px 24px; font-size: 14px; font-weight: 800;
+      border-radius: 8px; border: 2px solid #000; cursor: pointer;
+      text-decoration: none; background: #000; color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">⚠️ 提示</div>
+    <h1>未能直接完成授权</h1>
+    <p>${safeText}</p>
+    <a class="btn" href="http://localhost:51200">返回仪表盘重新发起</a>
+  </div>
+</body>
+</html>`;
+  }
 }
