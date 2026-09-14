@@ -2645,12 +2645,14 @@
               '⚡ 已自动切号',
               activeAcc.email.split('@')[0] + ' 余量已降至 ' + activePct + '%（≤阈值 ' + currentThreshold + '%），已自动切换至 ' + bestAcc.email
             );
-            // 桌面通知
-            if (Notification && Notification.permission === 'granted') {
-              new Notification('⚡ 反重力自动切号', {
-                body: '已从 ' + activeAcc.email + ' 切换至 ' + bestAcc.email,
-                icon: '/favicon.ico'
-              });
+            // 桌面通知（仅当用户明确开启系统通知时才发送，默认关闭避免打扰）
+            if (localStorage.getItem('user_enable_windows_notify') === 'true' && window.Notification && Notification.permission === 'granted') {
+              try {
+                new Notification('⚡ 反重力自动切号', {
+                  body: '已从 ' + activeAcc.email + ' 切换至 ' + bestAcc.email,
+                  icon: '/favicon.ico'
+                });
+              } catch (e) {}
             }
             render(data);
           }
@@ -3432,10 +3434,8 @@
               notifiedCooldowns.add(notifyKey);
               cell.setAttribute('data-notified', '1');
 
-              // 仅当倒计时是在页面打开后刚刚自然归零（相差15秒内）时，才弹窗通知；防止一刷新页面历史数据死循环刷屏
-              if (resetTime >= pageLoadTimestamp - 15000) {
-                showDesktopNotify('🎉 账号冷却归零满血', email + ' 5小时水位已达重置时间，系统已自动向 Google 发起微探测唤醒！');
-              }
+              // 静默在控制台记录与发起微探测，不再触发任何桌面级弹窗打扰
+              console.log(`[Cooldown Ticker] Account ${email} reset reached 0, probing...`);
 
               if (!autoProbeTriggered) {
                 autoProbeTriggered = true;
@@ -3471,54 +3471,61 @@
 
     
     // ─── Feature 2: 桌面级气泡通知与 Toast ───
-    let desktopNotificationEnabled = (Notification && Notification.permission === 'granted');
-
     function updateNotifyBtnUI() {
       const btn = document.getElementById('notifyBtn');
       if (btn) {
-        if (Notification.permission === 'granted') {
-          btn.innerText = '🔔 通知已开';
+        const enabled = localStorage.getItem('user_enable_windows_notify') === 'true';
+        if (enabled && ('Notification' in window) && Notification.permission === 'granted') {
+          btn.innerText = '🔔 桌面通知已开';
           btn.style.background = '#dcfce7';
           btn.style.color = '#166534';
         } else {
-          btn.innerText = '🔔 桌面通知';
+          btn.innerText = '🔕 桌面通知已静音';
+          btn.style.background = '#f1f5f9';
+          btn.style.color = '#64748b';
         }
       }
     }
 
     async function toggleDesktopNotifications() {
+      const current = localStorage.getItem('user_enable_windows_notify') === 'true';
+      if (current) {
+        localStorage.setItem('user_enable_windows_notify', 'false');
+        updateNotifyBtnUI();
+        showToast('🔕 桌面通知已静音', '已彻底禁用 Windows 右下角弹窗，系统保持安静。');
+        return;
+      }
+
       if (!('Notification' in window)) {
         alert('当前浏览器不支持系统级桌面通知');
         return;
       }
-      if (Notification.permission === 'granted') {
-        showToast('🔔 桌面通知', '桌面通知已是开启状态，遇到满血复活或切号将弹窗提醒。');
-        return;
-      }
       const perm = await Notification.requestPermission();
       if (perm === 'granted') {
-        desktopNotificationEnabled = true;
+        localStorage.setItem('user_enable_windows_notify', 'true');
         updateNotifyBtnUI();
-        showDesktopNotify('🎉 桌面通知已激活', '当账号冷却结束恢复满血或触发切号时，系统将主动提醒！');
+        showToast('🔔 桌面通知已开启', '重要事件将通过 Windows 桌面弹窗提示。');
       } else {
         alert('通知权限未开启，若需启用请在浏览器地址栏左侧图标中允许通知。');
       }
     }
 
-    // 桌面通知防抖缓存：相同内容在 15 秒内不重复弹系统级通知
+    // 桌面通知防抖缓存：默认完全禁用系统级桌面弹窗，除非用户在界面上主动开启
     const recentDesktopNotifies = new Map();
     function showDesktopNotify(title, body) {
-      const notifyKey = `${title}_${body}`;
-      const now = Date.now();
-      if (recentDesktopNotifies.has(notifyKey) && (now - recentDesktopNotifies.get(notifyKey) < 15000)) {
-        return;
-      }
-      recentDesktopNotifies.set(notifyKey, now);
+      if (localStorage.getItem('user_enable_windows_notify') === 'true') {
+        const notifyKey = `${title}_${body}`;
+        const now = Date.now();
+        if (recentDesktopNotifies.has(notifyKey) && (now - recentDesktopNotifies.get(notifyKey) < 15000)) {
+          return;
+        }
+        recentDesktopNotifies.set(notifyKey, now);
 
-      if (window.Notification && Notification.permission === 'granted') {
-        try {
-          new Notification(title, { body: body });
-        } catch (e) {}
+        if (window.Notification && Notification.permission === 'granted') {
+          try {
+            new Notification(title, { body: body });
+          } catch (e) {}
+        }
       }
       showToast(title, body);
     }
