@@ -3398,6 +3398,9 @@
 
     // ─── 动态倒计时全局时钟 (每秒动态跳动一次，支持冷却倒计时与重置倒计时) ───
     let autoProbeTriggered = false;
+    const pageLoadTimestamp = Date.now();
+    const notifiedCooldowns = new Set();
+
     function tickLiveCooldowns() {
       const timerCells = document.querySelectorAll('.live-meta-timer[data-reset]');
       const now = Date.now();
@@ -3406,10 +3409,12 @@
         const resetStr = cell.getAttribute('data-reset');
         const email = cell.getAttribute('data-email');
         const isZero = cell.getAttribute('data-zero') === '1';
-        if (!resetStr) return;
+        if (!resetStr || !email) return;
 
         const safeId = btoa(email).replace(/=/g, '').replace(/[^a-zA-Z0-9]/g, '_');
-        const diff = Math.max(0, Math.floor((new Date(resetStr).getTime() - now) / 1000));
+        const resetTime = new Date(resetStr).getTime();
+        if (isNaN(resetTime)) return;
+        const diff = Math.max(0, Math.floor((resetTime - now) / 1000));
         const clockEl = cell.querySelector('.cd-digital-text') || document.getElementById('cd_clock_' + safeId);
 
         if (diff <= 0) {
@@ -3418,14 +3423,28 @@
           }
           if (isZero) {
             cell.innerHTML = '<span class="cooling-timer-pill" style="background:#dcfce7;border-color:#16a34a;color:#166534;"><span style="color:#16a34a;">⚡</span> <strong>已归零，自动唤醒激活中...</strong></span>';
-            showDesktopNotify('🎉 账号冷却归零满血', email + ' 5小时水位已达重置时间，系统已自动向 Google 发起微探测唤醒！');
-            if (!autoProbeTriggered) {
-              autoProbeTriggered = true;
-              console.log('[Cooldown Ticker] Reset reached 0, auto-refreshing quota...');
-              setTimeout(() => {
-                fetchStatus(true);
-                autoProbeTriggered = false;
-              }, 2000);
+            cell.setAttribute('data-zero', '0');
+
+            const notifyKey = `${email}_${resetStr}`;
+            const alreadyNotified = cell.getAttribute('data-notified') === '1' || notifiedCooldowns.has(notifyKey);
+
+            if (!alreadyNotified) {
+              notifiedCooldowns.add(notifyKey);
+              cell.setAttribute('data-notified', '1');
+
+              // 仅当倒计时是在页面打开后刚刚自然归零（相差15秒内）时，才弹窗通知；防止一刷新页面历史数据死循环刷屏
+              if (resetTime >= pageLoadTimestamp - 15000) {
+                showDesktopNotify('🎉 账号冷却归零满血', email + ' 5小时水位已达重置时间，系统已自动向 Google 发起微探测唤醒！');
+              }
+
+              if (!autoProbeTriggered) {
+                autoProbeTriggered = true;
+                console.log('[Cooldown Ticker] Reset reached 0, auto-refreshing quota...');
+                setTimeout(() => {
+                  fetchStatus(true);
+                  setTimeout(() => { autoProbeTriggered = false; }, 10000);
+                }, 2000);
+              }
             }
           }
           return;
@@ -3486,7 +3505,16 @@
       }
     }
 
+    // 桌面通知防抖缓存：相同内容在 15 秒内不重复弹系统级通知
+    const recentDesktopNotifies = new Map();
     function showDesktopNotify(title, body) {
+      const notifyKey = `${title}_${body}`;
+      const now = Date.now();
+      if (recentDesktopNotifies.has(notifyKey) && (now - recentDesktopNotifies.get(notifyKey) < 15000)) {
+        return;
+      }
+      recentDesktopNotifies.set(notifyKey, now);
+
       if (window.Notification && Notification.permission === 'granted') {
         try {
           new Notification(title, { body: body });
@@ -3502,6 +3530,10 @@
         container.id = 'toastContainer';
         container.className = 'toast-container';
         document.body.appendChild(container);
+      }
+      // 限制最多同时存在 3 个 Toast 提示，多余的立即移除旧提示，绝不刷屏堆满屏幕
+      while (container.children.length >= 3) {
+        container.firstElementChild.remove();
       }
       const toast = document.createElement('div');
       toast.className = 'toast-item';
